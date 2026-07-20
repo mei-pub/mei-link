@@ -105,7 +105,7 @@ final class StatusBarController: NSObject {
     func install() {
         guard statusItem == nil else { return }
 
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.target = self
         item.button?.action = #selector(togglePopover(_:))
         statusItem = item
@@ -152,18 +152,55 @@ final class StatusBarController: NSObject {
             isConnected: manager.isConnected,
             isFrpcRunning: manager.isFrpcRunning
         )
-        let image = NSImage(systemSymbolName: statusItem.imageName, accessibilityDescription: "Meilink")
-        image?.isTemplate = true
+        let image = makeMenuBarIcon()
         button.image = image
-        button.imagePosition = .imageLeading
-        button.title = "Mei"
-        button.attributedTitle = NSAttributedString(
-            string: "Mei",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
-                .foregroundColor: NSColor.labelColor
-            ]
-        )
+        button.imagePosition = .imageOnly
+        button.title = ""
+        button.attributedTitle = NSAttributedString(string: "")
         button.toolTip = "Meilink - \(statusItem.accessibilityStatus)"
+    }
+
+    private func makeMenuBarIcon() -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18))
+        image.lockFocus()
+
+        NSColor.black.setStroke()
+        NSColor.black.setFill()
+
+        let path = NSBezierPath()
+        path.lineWidth = 1.8
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+
+        path.move(to: NSPoint(x: 4.2, y: 9))
+        path.line(to: NSPoint(x: 4.2, y: 4.4))
+        path.line(to: NSPoint(x: 6.3, y: 4.4))
+        path.line(to: NSPoint(x: 9, y: 8.2))
+        path.line(to: NSPoint(x: 11.7, y: 4.4))
+        path.line(to: NSPoint(x: 13.8, y: 4.4))
+        path.line(to: NSPoint(x: 13.8, y: 9))
+        path.stroke()
+
+        let linkPath = NSBezierPath()
+        linkPath.lineWidth = 1.8
+        linkPath.lineCapStyle = .round
+        linkPath.move(to: NSPoint(x: 5, y: 12.2))
+        linkPath.curve(
+            to: NSPoint(x: 8.4, y: 12.2),
+            controlPoint1: NSPoint(x: 5.8, y: 14.1),
+            controlPoint2: NSPoint(x: 7.6, y: 14.1)
+        )
+        linkPath.move(to: NSPoint(x: 9.6, y: 12.2))
+        linkPath.curve(
+            to: NSPoint(x: 13, y: 12.2),
+            controlPoint1: NSPoint(x: 10.4, y: 10.3),
+            controlPoint2: NSPoint(x: 12.2, y: 10.3)
+        )
+        linkPath.stroke()
+
+        image.unlockFocus()
+        image.isTemplate = true
+        image.accessibilityDescription = "Meilink"
+        return image
     }
 }
