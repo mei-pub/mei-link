@@ -71,6 +71,20 @@ class FrpcProcess {
             }
         }
     }
+
+    func stopImmediately(timeout: TimeInterval = 2.0) {
+        guard let process = process, process.isRunning else { return }
+
+        process.terminate()
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning && Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+        }
+
+        if process.isRunning {
+            process.interrupt()
+        }
+    }
 }
 
 enum FrpcProcessError: Error, LocalizedError {

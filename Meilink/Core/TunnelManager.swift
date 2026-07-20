@@ -117,6 +117,15 @@ class TunnelManager: ObservableObject {
         addEvent("隧道管理器已停止")
     }
 
+    func stopImmediately() {
+        statusTimer?.invalidate()
+        statusTimer = nil
+
+        frpcProcess.stopImmediately()
+        isFrpcRunning = false
+        isConnected = false
+    }
+
     func restart() async {
         await stop()
         try? await Task.sleep(nanoseconds: 1_000_000_000)

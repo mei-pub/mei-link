@@ -17,19 +17,6 @@ final class AppRuntime {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
-        AppRuntime.shared.statusBar.install()
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        Task { @MainActor in
-            await AppRuntime.shared.manager.stop()
-        }
-    }
-}
-
 @MainActor
 final class AppWindowController {
     private let manager: TunnelManager
@@ -79,6 +66,7 @@ final class AppWindowController {
     ) -> NSWindow {
         if let existing {
             existing.makeKeyAndOrderFront(nil)
+            existing.orderFrontRegardless()
             NSApp.activate(ignoringOtherApps: true)
             return existing
         }
@@ -94,6 +82,7 @@ final class AppWindowController {
         window.contentViewController = NSHostingController(rootView: content())
         window.center()
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
         return window
     }
@@ -166,6 +155,15 @@ final class StatusBarController: NSObject {
         let image = NSImage(systemSymbolName: statusItem.imageName, accessibilityDescription: "Meilink")
         image?.isTemplate = true
         button.image = image
-        button.toolTip = "Meilink"
+        button.imagePosition = .imageLeading
+        button.title = "Mei"
+        button.attributedTitle = NSAttributedString(
+            string: "Mei",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+                .foregroundColor: NSColor.labelColor
+            ]
+        )
+        button.toolTip = "Meilink - \(statusItem.accessibilityStatus)"
     }
 }
