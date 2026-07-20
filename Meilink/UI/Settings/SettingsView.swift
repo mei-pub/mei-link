@@ -13,9 +13,12 @@ struct SettingsView: View {
     @State private var isSaving = false
     @State private var isTesting = false
     @State private var showToken = false
+    @State private var menuBarIconStyle: MenuBarIconStyle = .link
     @State private var saveError: String?
     @State private var testMessage: String?
     @State private var testSucceeded = false
+
+    var onClose: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,7 +47,7 @@ struct SettingsView: View {
             Divider()
             footer
         }
-        .frame(width: 640, height: 680)
+        .frame(width: 760, height: 820)
         .onAppear {
             loadFields()
         }
@@ -158,6 +161,27 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            settingsRow("菜单栏图标") {
+                Picker("菜单栏图标", selection: $menuBarIconStyle) {
+                    ForEach(MenuBarIconStyle.allCases) { style in
+                        Text(style.displayName).tag(style)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 180)
+                .onChange(of: menuBarIconStyle) { newValue in
+                    updateMenuBarIconStyle(newValue)
+                }
+
+                Button {
+                    manager.rebuildMenuBarIcon()
+                    AppRuntime.shared.rebuildStatusBar()
+                } label: {
+                    Label("重建图标", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .buttonStyle(.bordered)
+            }
         }
     }
 
@@ -206,7 +230,7 @@ struct SettingsView: View {
             Spacer()
 
             Button("关闭") {
-                dismiss()
+                close()
             }
             .keyboardShortcut(.cancelAction)
         }
@@ -260,6 +284,7 @@ struct SettingsView: View {
             tlsEnabled = config.tlsEnabled
         }
         launchAtLogin = AutoStartManager.isEnabled
+        menuBarIconStyle = manager.appSettings.menuBarIconStyle
     }
 
     private func testConnection() {
@@ -296,6 +321,18 @@ struct SettingsView: View {
         }
     }
 
+    private func updateMenuBarIconStyle(_ style: MenuBarIconStyle) {
+        var settings = manager.appSettings
+        settings.menuBarIconStyle = style
+        do {
+            try manager.saveAppSettings(settings)
+            manager.rebuildMenuBarIcon()
+            AppRuntime.shared.rebuildStatusBar()
+        } catch {
+            manager.addEvent("保存菜单栏图标设置失败: \(error.localizedDescription)", level: .error)
+        }
+    }
+
     private func saveConfiguration(restartAfterSave: Bool) {
         guard let port = Int(serverPort) else {
             saveError = "端口必须是数字"
@@ -320,16 +357,24 @@ struct SettingsView: View {
                 Task {
                     await manager.restart()
                     isSaving = false
-                    dismiss()
+                    close()
                 }
             } else {
                 isSaving = false
-                dismiss()
+                close()
             }
         } catch {
             isSaving = false
             saveError = error.localizedDescription
             manager.addEvent("保存配置失败: \(error.localizedDescription)", level: .error)
+        }
+    }
+
+    private func close() {
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
         }
     }
 }

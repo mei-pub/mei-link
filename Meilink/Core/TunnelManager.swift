@@ -9,6 +9,7 @@ class TunnelManager: ObservableObject {
     @Published var serverConfig: ServerConfig?
     @Published var events: [EventLog] = []
     @Published var isConfigured = false
+    @Published var appSettings = AppSettings()
 
     private let frpcProcess = FrpcProcess()
     private var adminAPI: FrpcAdminAPI?
@@ -28,11 +29,21 @@ class TunnelManager: ObservableObject {
     }
 
     func loadConfiguration() {
+        appSettings = store.loadSettings()
         if let config = store.loadServerConfig() {
             serverConfig = config
             tunnels = store.loadTunnels()
             isConfigured = true
         }
+    }
+
+    func saveAppSettings(_ settings: AppSettings) throws {
+        try store.saveSettings(settings)
+        appSettings = settings
+    }
+
+    func rebuildMenuBarIcon() {
+        addEvent("菜单栏图标已重建")
     }
 
     func saveConfiguration(_ config: ServerConfig) throws {

@@ -5,6 +5,7 @@ struct TunnelEditView: View {
     @Environment(\.dismiss) private var dismiss
 
     var tunnel: Tunnel?
+    var onClose: (() -> Void)? = nil
 
     @State private var name = ""
     @State private var type: TunnelType = .http
@@ -85,7 +86,7 @@ struct TunnelEditView: View {
 
             footer
         }
-        .frame(width: 560, height: 520)
+        .frame(width: 620, height: 640)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             if let tunnel = tunnel {
@@ -119,7 +120,7 @@ struct TunnelEditView: View {
     private var footer: some View {
         HStack(spacing: 12) {
             Button("取消") {
-                dismiss()
+                close()
             }
             .keyboardShortcut(.cancelAction)
 
@@ -214,7 +215,7 @@ struct TunnelEditView: View {
             Task {
                 try? await manager.updateTunnel(existing)
                 isSaving = false
-                dismiss()
+                close()
             }
         } else {
             let newTunnel = Tunnel(
@@ -231,8 +232,16 @@ struct TunnelEditView: View {
             Task {
                 try? await manager.addTunnel(newTunnel)
                 isSaving = false
-                dismiss()
+                close()
             }
+        }
+    }
+
+    private func close() {
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
         }
     }
 }

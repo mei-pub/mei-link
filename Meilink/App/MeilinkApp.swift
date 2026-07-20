@@ -8,14 +8,33 @@ struct MeilinkApp: App {
     init() {
         ProcessInfo.processInfo.disableAutomaticTermination("Meilink runs from the menu bar")
         ProcessInfo.processInfo.disableSuddenTermination()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            AppRuntime.shared.installStatusBar()
+            AppRuntime.shared.windows.showMainWindow()
+        }
     }
 
     var body: some Scene {
+        MenuBarExtra {
+            MenuBarView(
+                manager: manager,
+                openMainWindow: { AppRuntime.shared.windows.showMainWindow() },
+                openSettingsWindow: { AppRuntime.shared.windows.showSettingsWindow() },
+                openSetupWindow: { AppRuntime.shared.windows.showSetupWindow() },
+                closePopover: {}
+            )
+        } label: {
+            HStack(spacing: 4) {
+                Image(nsImage: AppIconProvider.image)
+                Text("Meilink")
+            }
+        }
+        .menuBarExtraStyle(.menu)
+
         Settings {
             EmptyView()
         }
     }
-
 }
 
 @MainActor
@@ -26,12 +45,8 @@ final class MeilinkAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        runtime.installStatusBar()
         ProcessInfo.processInfo.disableAutomaticTermination("Meilink runs from the menu bar")
         ProcessInfo.processInfo.disableSuddenTermination()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [runtime] in
-            runtime.windows.showMainWindow()
-        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

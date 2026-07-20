@@ -2,9 +2,6 @@ import SwiftUI
 
 struct MainWindow: View {
     @ObservedObject var manager: TunnelManager
-    @State private var showAddTunnel = false
-    @State private var editingTunnel: Tunnel?
-    @State private var showSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,16 +11,7 @@ struct MainWindow: View {
             Divider()
             footer
         }
-        .frame(minWidth: 940, minHeight: 520)
-        .sheet(isPresented: $showAddTunnel) {
-            TunnelEditView(manager: manager)
-        }
-        .sheet(item: $editingTunnel) { tunnel in
-            TunnelEditView(manager: manager, tunnel: tunnel)
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView(manager: manager)
-        }
+        .frame(minWidth: 980, minHeight: 680)
     }
 
     private var header: some View {
@@ -46,7 +34,7 @@ struct MainWindow: View {
 
             HStack(spacing: 12) {
                 statusIndicator
-                headerButton {
+                headerButton(width: 104) {
                     Task {
                         if manager.isFrpcRunning {
                             await manager.stop()
@@ -59,15 +47,15 @@ struct MainWindow: View {
                 }
                 .disabled(!manager.isConfigured)
 
-                headerButton {
+                headerButton(width: 104) {
                     Task { await manager.restart() }
                 } label: {
                     Label("重启", systemImage: "arrow.clockwise")
                 }
                 .disabled(!manager.isConfigured)
 
-                headerButton {
-                    showSettings = true
+                headerButton(width: 104) {
+                    AppRuntime.shared.windows.showSettingsWindow()
                 } label: {
                     Label("设置", systemImage: "gear")
                 }
@@ -79,7 +67,7 @@ struct MainWindow: View {
     }
 
     private var appLogo: some View {
-        Image(nsImage: NSApp.applicationIconImage)
+        Image(nsImage: AppIconProvider.image)
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(width: 42, height: 42)
@@ -94,25 +82,28 @@ struct MainWindow: View {
                 .frame(width: 10, height: 10)
             Text(statusText)
                 .font(.subheadline)
-                .fontWeight(.medium)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+        .fontWeight(.medium)
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
         }
-        .frame(width: 112, height: 40)
-        .padding(.horizontal, 10)
+        .frame(width: 128, height: 46)
         .background(Color.secondary.opacity(0.08))
         .cornerRadius(8)
     }
 
     private func headerButton<LabelContent: View>(
+        width: CGFloat,
         action: @escaping () -> Void,
         @ViewBuilder label: () -> LabelContent
     ) -> some View {
         Button(action: action) {
             label()
                 .lineLimit(1)
-                .frame(width: 92, height: 40)
+                .frame(width: width, height: 46)
+                .background(Color.secondary.opacity(0.08))
+                .cornerRadius(8)
         }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -128,7 +119,7 @@ struct MainWindow: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 Button {
-                    showAddTunnel = true
+                    AppRuntime.shared.windows.showTunnelWindow()
                 } label: {
                     Label("添加隧道", systemImage: "plus")
                 }
@@ -142,7 +133,7 @@ struct MainWindow: View {
                             tunnel: tunnel,
                             serverConfig: manager.serverConfig
                         ) {
-                            editingTunnel = tunnel
+                            AppRuntime.shared.windows.showTunnelWindow(tunnel: tunnel)
                         } onDelete: {
                             Task {
                                 try? await manager.deleteTunnel(id: tunnel.id)
@@ -174,10 +165,13 @@ struct MainWindow: View {
     private var footer: some View {
         HStack {
             Button {
-                showAddTunnel = true
+                AppRuntime.shared.windows.showTunnelWindow()
             } label: {
                 Label("添加隧道", systemImage: "plus")
+                    .frame(width: 124, height: 32)
             }
+            .controlSize(.regular)
+            .buttonStyle(.bordered)
 
             Spacer()
 
@@ -186,9 +180,14 @@ struct MainWindow: View {
                 .foregroundColor(.secondary)
 
             if !manager.events.isEmpty {
-                Button("清空日志") {
+                Button {
                     manager.clearEvents()
+                } label: {
+                    Text("清空日志")
+                        .frame(width: 104, height: 32)
                 }
+                .controlSize(.regular)
+                .buttonStyle(.bordered)
             }
         }
         .padding(.horizontal, 20)
