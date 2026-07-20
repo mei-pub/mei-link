@@ -14,7 +14,7 @@ struct MainWindow: View {
             Divider()
             footer
         }
-        .frame(minWidth: 760, minHeight: 520)
+        .frame(minWidth: 940, minHeight: 520)
         .sheet(isPresented: $showAddTunnel) {
             TunnelEditView(manager: manager)
         }
@@ -27,23 +27,26 @@ struct MainWindow: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 16) {
-            appLogo
+        HStack(alignment: .center, spacing: 24) {
+            HStack(alignment: .center, spacing: 16) {
+                appLogo
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Meilink")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Text(serverSummary)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Meilink")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    Text(serverSummary)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(0)
 
             HStack(spacing: 12) {
                 statusIndicator
-                Button {
+                headerButton {
                     Task {
                         if manager.isFrpcRunning {
                             await manager.stop()
@@ -56,19 +59,21 @@ struct MainWindow: View {
                 }
                 .disabled(!manager.isConfigured)
 
-                Button {
+                headerButton {
                     Task { await manager.restart() }
                 } label: {
                     Label("重启", systemImage: "arrow.clockwise")
                 }
                 .disabled(!manager.isConfigured)
 
-                Button {
+                headerButton {
                     showSettings = true
                 } label: {
                     Label("设置", systemImage: "gear")
                 }
             }
+            .frame(minWidth: 560, alignment: .trailing)
+            .layoutPriority(1)
         }
         .padding(20)
     }
@@ -93,11 +98,21 @@ struct MainWindow: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        .frame(minWidth: 92, minHeight: 40)
+        .frame(width: 112, height: 40)
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
         .background(Color.secondary.opacity(0.08))
         .cornerRadius(8)
+    }
+
+    private func headerButton<LabelContent: View>(
+        action: @escaping () -> Void,
+        @ViewBuilder label: () -> LabelContent
+    ) -> some View {
+        Button(action: action) {
+            label()
+                .lineLimit(1)
+                .frame(width: 92, height: 40)
+        }
     }
 
     @ViewBuilder
