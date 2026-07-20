@@ -70,10 +70,16 @@ curl -L "https://github.com/fatedier/frp/releases/download/${FRP_VERSION}/frp_${
 tar xzf frp.tar.gz
 cd frp_${FRP_VERSION#v}_linux_${FRP_ARCH}
 
+# 停止旧服务，避免覆盖正在运行的 frps 二进制时报 Text file busy
+if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet frps; then
+    echo "正在停止已有 frps 服务..."
+    sudo systemctl stop frps
+fi
+
 # 安装 frps
 echo "正在安装 frps..."
-sudo cp frps /usr/local/bin/
-sudo chmod +x /usr/local/bin/frps
+sudo install -m 755 frps /usr/local/bin/frps.new
+sudo mv -f /usr/local/bin/frps.new /usr/local/bin/frps
 
 # 创建配置目录
 sudo mkdir -p /etc/frps
