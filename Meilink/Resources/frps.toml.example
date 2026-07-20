@@ -1,0 +1,24 @@
+# frps 服务端配置示例
+# 将此文件放到你的 VPS 上
+
+# 监听端口（客户端连接端口）
+bindPort = 7000
+
+# HTTP vhost 端口（子域名访问）
+vhostHTTPPort = 8080
+
+# HTTPS vhost 端口
+vhostHTTPSPort = 8443
+
+# 子域名基域（需要在 DNS 配置泛解析）
+subDomainHost = "tunnel.yourdomain.com"
+
+# 认证配置
+auth.method = "token"
+auth.token = "YOUR_SECRET_TOKEN_HERE"
+
+# 可选：Dashboard（管理面板）
+webServer.addr = "0.0.0.0"
+webServer.port = 7500
+webServer.user = "admin"
+webServer.password = "admin"

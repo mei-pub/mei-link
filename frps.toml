@@ -1,0 +1,20 @@
+# Meilink frps 服务端配置
+# 修改下面的参数后放到 VPS 上
+
+# 监听端口（客户端连接端口）
+bindPort = 7000
+
+# HTTP vhost 端口（子域名访问）
+vhostHTTPPort = 8080
+
+# HTTPS vhost 端口
+vhostHTTPSPort = 8443
+
+# 子域名基域（需要在 DNS 配置泛解析）
+# 例如: tunnel.yourdomain.com
+subDomainHost = "tunnel.yourdomain.com"
+
+# 认证配置
+# 改成你自己的密钥！
+auth.method = "token"
+auth.token = "your-secret-token-here"

@@ -1,0 +1,5 @@
+.build/
+.mimocode/
+.DS_Store
+*.swp
+*~

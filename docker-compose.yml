@@ -1,0 +1,15 @@
+# Meilink frps Docker 部署配置
+# 用法: docker compose up -d
+
+version: '3'
+services:
+  frps:
+    image: snowdreamtech/frps:latest
+    container_name: frps
+    restart: always
+    ports:
+      - "7000:7000"     # 客户端连接端口
+      - "8080:8080"     # HTTP 子域名访问端口
+      - "8443:8443"     # HTTPS 子域名访问端口
+    volumes:
+      - ./frps.toml:/etc/frps/frps.toml
