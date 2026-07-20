@@ -1,4 +1,5 @@
 .build/
+build/dist/
 .mimocode/
 .DS_Store
 *.swp
