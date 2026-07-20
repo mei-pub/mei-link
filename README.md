@@ -33,6 +33,16 @@ auth.method = "token"
 auth.token = "YOUR_SECRET_TOKEN"
 ```
 
+仓库内的部署脚本支持安装和服务管理：
+
+```bash
+./deploy-frps.sh           # 安装或更新 frps，并启动服务
+./deploy-frps.sh start     # 启动服务
+./deploy-frps.sh stop      # 停止服务
+./deploy-frps.sh restart   # 重启服务
+./deploy-frps.sh status    # 查看状态
+```
+
 ### 2. DNS 配置
 
 在域名管理处添加泛解析记录：
