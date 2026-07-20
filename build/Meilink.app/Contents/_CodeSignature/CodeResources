@@ -3,7 +3,12 @@
 <plist version="1.0">
 <dict>
 	<key>files</key>
-	<dict/>
+	<dict>
+		<key>Resources/AppIcon.icns</key>
+		<data>
+		8wTZwWMnJoCebJNZKhf74PlBAe8=
+		</data>
+	</dict>
 	<key>files2</key>
 	<dict>
 		<key>MacOS/Meilink.entitlements</key>
@@ -23,6 +28,13 @@
 			</data>
 			<key>requirement</key>
 			<string>cdhash H"9471b738887d8ae618059b08ffae3d98bfae8f12"</string>
+		</dict>
+		<key>Resources/AppIcon.icns</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			6srkZVd+l4npGV8ulTZC7gxxRSMCXJGYyhFyZ/wpIfY=
+			</data>
 		</dict>
 	</dict>
 	<key>rules</key>
