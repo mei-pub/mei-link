@@ -63,12 +63,38 @@ FRPS_PORT=""
 HTTP_PORT=""
 HTTPS_PORT=""
 SUB_DOMAIN_HOST=""
+AUTH_TOKEN=""
 
 load_config_values() {
     FRPS_PORT="$(get_toml_value bindPort)"
     HTTP_PORT="$(get_toml_value vhostHTTPPort)"
     HTTPS_PORT="$(get_toml_value vhostHTTPSPort)"
     SUB_DOMAIN_HOST="$(get_toml_value subDomainHost)"
+    AUTH_TOKEN="$(get_toml_value auth.token)"
+}
+
+validate_config_values() {
+    local has_error=0
+
+    if [ -z "$FRPS_PORT" ] || [ -z "$HTTP_PORT" ] || [ -z "$HTTPS_PORT" ]; then
+        echo "frps.toml 缺少 bindPort、vhostHTTPPort 或 vhostHTTPSPort。"
+        has_error=1
+    fi
+
+    if [ -z "$SUB_DOMAIN_HOST" ] || [ "$SUB_DOMAIN_HOST" = "tunnel.yourdomain.com" ]; then
+        echo "请先在 frps.toml 中把 subDomainHost 改成你的域名。"
+        has_error=1
+    fi
+
+    if [ -z "$AUTH_TOKEN" ] || [ "$AUTH_TOKEN" = "your-secret-token-here" ]; then
+        echo "请先在 frps.toml 中把 auth.token 改成你的真实 Token。"
+        has_error=1
+    fi
+
+    if [ "$has_error" -ne 0 ]; then
+        echo "配置未完成，部署已停止。"
+        exit 1
+    fi
 }
 
 print_config_summary() {
@@ -151,6 +177,7 @@ EOF
 deploy() {
     require_config
     load_config_values
+    validate_config_values
     print_config_summary
     detect_arch
 
