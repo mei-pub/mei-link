@@ -10,7 +10,7 @@ class FrpcProcess {
     var processID: Int32? { process?.processIdentifier }
 
     func start(configPath: String) throws {
-        guard let frpcPath = Bundle.main.path(forResource: "frpc", ofType: nil) else {
+        guard let frpcPath = findFrpcPath() else {
             throw FrpcProcessError.binaryNotFound
         }
 
@@ -45,6 +45,19 @@ class FrpcProcess {
 
         try process?.run()
         logger.info("frpc 进程已启动，PID: \(process?.processIdentifier ?? 0)")
+    }
+
+    private func findFrpcPath() -> String? {
+        if let resourcePath = Bundle.main.path(forResource: "frpc", ofType: nil) {
+            return resourcePath
+        }
+
+        guard let executableDirectory = Bundle.main.executableURL?.deletingLastPathComponent() else {
+            return nil
+        }
+
+        let siblingPath = executableDirectory.appendingPathComponent("frpc").path
+        return FileManager.default.isExecutableFile(atPath: siblingPath) ? siblingPath : nil
     }
 
     func stop() {

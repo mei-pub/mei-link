@@ -20,6 +20,11 @@ class TunnelManager: ObservableObject {
 
     init() {
         loadConfiguration()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            Task { @MainActor in
+                await self?.startIfNeeded()
+            }
+        }
     }
 
     func loadConfiguration() {
@@ -39,6 +44,8 @@ class TunnelManager: ObservableObject {
     }
 
     func start() async {
+        guard !isFrpcRunning else { return }
+
         guard let config = serverConfig else {
             addEvent("未配置服务器", level: .error)
             return
@@ -68,16 +75,31 @@ class TunnelManager: ObservableObject {
             addEvent("Admin API 未就绪，frpc 可能正在重连", level: .warning)
         }
 
+        var restoredProxy = false
         for tunnel in tunnels where tunnel.enabled {
             do {
                 try await adminAPI?.createProxy(tunnel.toProxyDefinition(serverConfig: config))
+                restoredProxy = true
             } catch {
                 addEvent("恢复隧道 \"\(tunnel.name)\" 失败: \(error.localizedDescription)", level: .warning)
             }
         }
 
+        if restoredProxy {
+            do {
+                try await adminAPI?.reload()
+            } catch {
+                addEvent("重载隧道配置失败: \(error.localizedDescription)", level: .warning)
+            }
+        }
+
         startStatusPolling()
         addEvent("隧道管理器已启动")
+    }
+
+    func startIfNeeded() async {
+        guard isConfigured, !isFrpcRunning else { return }
+        await start()
     }
 
     func stop() async {
@@ -111,6 +133,7 @@ class TunnelManager: ObservableObject {
 
         do {
             try await adminAPI?.createProxy(tunnel.toProxyDefinition(serverConfig: serverConfig))
+            try await adminAPI?.reload()
             addEvent("隧道 \"\(tunnel.name)\" 已创建")
         } catch {
             addEvent("创建隧道 \"\(tunnel.name)\" 失败: \(error.localizedDescription)", level: .error)
@@ -128,6 +151,7 @@ class TunnelManager: ObservableObject {
 
         do {
             try await adminAPI?.updateProxy(name: tunnel.name, definition: tunnel.toProxyDefinition(serverConfig: serverConfig))
+            try await adminAPI?.reload()
             addEvent("隧道 \"\(tunnel.name)\" 已更新")
         } catch {
             addEvent("更新隧道 \"\(tunnel.name)\" 失败: \(error.localizedDescription)", level: .error)
@@ -140,6 +164,7 @@ class TunnelManager: ObservableObject {
 
         do {
             try await adminAPI?.deleteProxy(name: tunnel.name)
+            try await adminAPI?.reload()
         } catch {
             logger.warning("删除代理 API 调用失败: \(error)")
         }
@@ -156,6 +181,7 @@ class TunnelManager: ObservableObject {
         if enabled {
             do {
                 try await adminAPI?.createProxy(tunnel.toProxyDefinition(serverConfig: serverConfig))
+                try await adminAPI?.reload()
                 addEvent("隧道 \"\(tunnel.name)\" 已启用")
             } catch {
                 addEvent("启用隧道 \"\(tunnel.name)\" 失败: \(error.localizedDescription)", level: .error)
@@ -163,6 +189,7 @@ class TunnelManager: ObservableObject {
             }
         } else {
             try? await adminAPI?.deleteProxy(name: tunnel.name)
+            try? await adminAPI?.reload()
             addEvent("隧道 \"\(tunnel.name)\" 已禁用")
         }
 
