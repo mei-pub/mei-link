@@ -3,16 +3,10 @@ import SwiftUI
 @main
 struct MeilinkApp: App {
     @StateObject private var manager = TunnelManager()
-    @State private var showMainWindow = false
-    @State private var showSetup = false
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarView(
-                manager: manager,
-                showMainWindow: $showMainWindow,
-                showSetup: $showSetup
-            )
+            MenuBarView(manager: manager)
         } label: {
             let statusItem = MenuBarStatusItem(
                 isConnected: manager.isConnected,
@@ -33,6 +27,11 @@ struct MeilinkApp: App {
         }
         .defaultSize(width: 500, height: 500)
         .handlesExternalEvents(matching: ["setup"])
+
+        Window("设置", id: "settings") {
+            SettingsView(manager: manager)
+        }
+        .defaultSize(width: 460, height: 540)
 
         Settings {
             SettingsView(manager: manager)

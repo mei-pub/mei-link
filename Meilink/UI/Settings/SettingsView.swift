@@ -6,9 +6,12 @@ struct SettingsView: View {
 
     @State private var serverAddr = ""
     @State private var serverPort = ""
+    @State private var authToken = ""
     @State private var subDomainHost = ""
     @State private var tlsEnabled = true
     @State private var launchAtLogin = false
+    @State private var isSaving = false
+    @State private var saveError: String?
 
     var body: some View {
         VStack(spacing: 16) {
@@ -27,6 +30,9 @@ struct SettingsView: View {
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 80)
                     }
+
+                    SecureField("认证 Token", text: $authToken)
+                        .textFieldStyle(.roundedBorder)
 
                     TextField("子域名基域", text: $subDomainHost)
                         .textFieldStyle(.roundedBorder)
@@ -69,8 +75,31 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
 
+            if let saveError {
+                HStack {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.red)
+                    Text(saveError)
+                        .foregroundColor(.red)
+                }
+                .font(.caption)
+            }
+
             HStack {
+                Button("保存") {
+                    saveConfiguration()
+                }
+                .disabled(
+                    isSaving ||
+                    serverAddr.isEmpty ||
+                    serverPort.isEmpty ||
+                    authToken.isEmpty ||
+                    subDomainHost.isEmpty
+                )
+                .keyboardShortcut(.defaultAction)
+
                 Spacer()
+
                 Button("关闭") {
                     dismiss()
                 }
@@ -83,10 +112,48 @@ struct SettingsView: View {
             if let config = manager.serverConfig {
                 serverAddr = config.serverAddr
                 serverPort = String(config.serverPort)
+                authToken = config.authToken
                 subDomainHost = config.subDomainHost
                 tlsEnabled = config.tlsEnabled
             }
             launchAtLogin = AutoStartManager.isEnabled
+        }
+    }
+
+    private func saveConfiguration() {
+        guard let port = Int(serverPort) else {
+            saveError = "端口必须是数字"
+            return
+        }
+
+        let config = ServerConfig(
+            serverAddr: serverAddr,
+            serverPort: port,
+            authToken: authToken,
+            subDomainHost: subDomainHost,
+            tlsEnabled: tlsEnabled
+        )
+
+        isSaving = true
+        saveError = nil
+
+        do {
+            try manager.saveConfiguration(config)
+            manager.addEvent("服务器配置已保存")
+            if manager.isFrpcRunning {
+                Task {
+                    await manager.restart()
+                    isSaving = false
+                    dismiss()
+                }
+            } else {
+                isSaving = false
+                dismiss()
+            }
+        } catch {
+            isSaving = false
+            saveError = error.localizedDescription
+            manager.addEvent("保存配置失败: \(error.localizedDescription)", level: .error)
         }
     }
 }

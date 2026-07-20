@@ -2,8 +2,7 @@ import SwiftUI
 
 struct MenuBarView: View {
     @ObservedObject var manager: TunnelManager
-    @Binding var showMainWindow: Bool
-    @Binding var showSetup: Bool
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -16,8 +15,7 @@ struct MenuBarView: View {
         .frame(width: 280)
         .onAppear {
             if !manager.isConfigured {
-                showSetup = true
-                NSApplication.shared.activate(ignoringOtherApps: true)
+                openAppWindow(id: "setup")
             }
         }
     }
@@ -65,22 +63,18 @@ struct MenuBarView: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button {
-                showMainWindow = true
-                NSApplication.shared.activate(ignoringOtherApps: true)
+                openAppWindow(id: "main")
             } label: {
-                Label("打开设置窗口", systemImage: "gear")
+                Label("打开主窗口", systemImage: "rectangle.stack")
             }
             .buttonStyle(.plain)
 
-            if !manager.isConfigured {
-                Button {
-                    showSetup = true
-                    NSApplication.shared.activate(ignoringOtherApps: true)
-                } label: {
-                    Label("首次配置...", systemImage: "plus.circle")
-                }
-                .buttonStyle(.plain)
+            Button {
+                openAppWindow(id: manager.isConfigured ? "settings" : "setup")
+            } label: {
+                Label(manager.isConfigured ? "服务器配置..." : "首次配置...", systemImage: "gear")
             }
+            .buttonStyle(.plain)
 
             Divider()
 
@@ -117,5 +111,10 @@ struct MenuBarView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 4)
+    }
+
+    private func openAppWindow(id: String) {
+        openWindow(id: id)
+        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 }
