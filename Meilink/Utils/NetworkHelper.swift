@@ -1,16 +1,64 @@
 import Foundation
+import Network
+
+private final class TCPProbeCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var completed = false
+    private let continuation: CheckedContinuation<Bool, Never>
+    var connection: NWConnection?
+
+    init(continuation: CheckedContinuation<Bool, Never>) {
+        self.continuation = continuation
+    }
+
+    func finish(_ success: Bool) {
+        lock.lock()
+        guard !completed else {
+            lock.unlock()
+            return
+        }
+        completed = true
+        let connection = connection
+        lock.unlock()
+
+        connection?.stateUpdateHandler = nil
+        connection?.cancel()
+        continuation.resume(returning: success)
+    }
+}
 
 struct NetworkHelper {
     static func testConnection(serverAddr: String, serverPort: Int) async throws -> Bool {
-        let url = URL(string: "http://\(serverAddr):\(serverPort)")!
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 5
-
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode != nil
-        } catch {
+        guard let port = NWEndpoint.Port(rawValue: UInt16(serverPort)) else {
             return false
+        }
+
+        return await withCheckedContinuation { continuation in
+            let connection = NWConnection(
+                host: NWEndpoint.Host(serverAddr),
+                port: port,
+                using: .tcp
+            )
+            let queue = DispatchQueue(label: "com.meilink.network-test")
+            let completion = TCPProbeCompletion(continuation: continuation)
+            completion.connection = connection
+
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    completion.finish(true)
+                case .failed, .cancelled:
+                    completion.finish(false)
+                default:
+                    break
+                }
+            }
+
+            connection.start(queue: queue)
+
+            queue.asyncAfter(deadline: .now() + 5) {
+                completion.finish(false)
+            }
         }
     }
 

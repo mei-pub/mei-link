@@ -113,7 +113,7 @@ struct SetupView: View {
 
     private func saveConfiguration() {
         let port = Int(serverPort) ?? 7000
-        var config = ServerConfig(
+        let config = ServerConfig(
             serverAddr: serverAddr,
             serverPort: port,
             authToken: authToken,
