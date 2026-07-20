@@ -102,7 +102,10 @@ struct TunnelEditView: View {
         guard let port = Int(localPort) else { return }
 
         let remoteP = Int(remotePort)
-        let subdomainVal = subdomain.isEmpty ? nil : subdomain
+        let subdomainVal = SubdomainNormalizer.normalize(
+            subdomain,
+            baseHost: manager.serverConfig?.subDomainHost
+        )
 
         if var existing = tunnel {
             existing.name = name

@@ -70,7 +70,7 @@ class TunnelManager: ObservableObject {
 
         for tunnel in tunnels where tunnel.enabled {
             do {
-                try await adminAPI?.createProxy(tunnel.toProxyDefinition())
+                try await adminAPI?.createProxy(tunnel.toProxyDefinition(serverConfig: config))
             } catch {
                 addEvent("恢复隧道 \"\(tunnel.name)\" 失败: \(error.localizedDescription)", level: .warning)
             }
@@ -110,7 +110,7 @@ class TunnelManager: ObservableObject {
         try store.saveTunnels(tunnels)
 
         do {
-            try await adminAPI?.createProxy(tunnel.toProxyDefinition())
+            try await adminAPI?.createProxy(tunnel.toProxyDefinition(serverConfig: serverConfig))
             addEvent("隧道 \"\(tunnel.name)\" 已创建")
         } catch {
             addEvent("创建隧道 \"\(tunnel.name)\" 失败: \(error.localizedDescription)", level: .error)
@@ -127,7 +127,7 @@ class TunnelManager: ObservableObject {
         }
 
         do {
-            try await adminAPI?.updateProxy(name: tunnel.name, definition: tunnel.toProxyDefinition())
+            try await adminAPI?.updateProxy(name: tunnel.name, definition: tunnel.toProxyDefinition(serverConfig: serverConfig))
             addEvent("隧道 \"\(tunnel.name)\" 已更新")
         } catch {
             addEvent("更新隧道 \"\(tunnel.name)\" 失败: \(error.localizedDescription)", level: .error)
@@ -155,7 +155,7 @@ class TunnelManager: ObservableObject {
         tunnel.enabled = enabled
         if enabled {
             do {
-                try await adminAPI?.createProxy(tunnel.toProxyDefinition())
+                try await adminAPI?.createProxy(tunnel.toProxyDefinition(serverConfig: serverConfig))
                 addEvent("隧道 \"\(tunnel.name)\" 已启用")
             } catch {
                 addEvent("启用隧道 \"\(tunnel.name)\" 失败: \(error.localizedDescription)", level: .error)

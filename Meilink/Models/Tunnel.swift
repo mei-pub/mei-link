@@ -96,7 +96,12 @@ struct Tunnel: Identifiable, Codable, Sendable {
         self.updatedAt = updatedAt
     }
 
-    func toProxyDefinition() -> ProxyDefinition {
+    func toProxyDefinition(serverConfig: ServerConfig? = nil) -> ProxyDefinition {
+        let normalizedSubdomain = SubdomainNormalizer.normalize(
+            subdomain,
+            baseHost: serverConfig?.subDomainHost
+        )
+
         switch type {
         case .tcp:
             return ProxyDefinition(
@@ -125,7 +130,7 @@ struct Tunnel: Identifiable, Codable, Sendable {
                 http: HTTPProxyConfig(
                     localIP: localIP,
                     localPort: localPort,
-                    subdomain: subdomain,
+                    subdomain: normalizedSubdomain,
                     customDomains: customDomains.isEmpty ? nil : customDomains,
                     locations: ["/"],
                     httpUser: httpUser,
@@ -140,7 +145,7 @@ struct Tunnel: Identifiable, Codable, Sendable {
                 https: HTTPSProxyConfig(
                     localIP: localIP,
                     localPort: localPort,
-                    subdomain: subdomain,
+                    subdomain: normalizedSubdomain,
                     customDomains: customDomains.isEmpty ? nil : customDomains
                 )
             )
