@@ -90,7 +90,10 @@ struct MainWindow: View {
             Text(statusText)
                 .font(.subheadline)
                 .fontWeight(.medium)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
+        .frame(minWidth: 92, minHeight: 40)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(Color.secondary.opacity(0.08))
