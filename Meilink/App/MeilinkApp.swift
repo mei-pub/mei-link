@@ -15,7 +15,7 @@ struct MeilinkApp: App {
             Image(systemName: statusItem.imageName)
                 .foregroundColor(statusItem.iconColor)
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)
 
         Window("Meilink", id: "main") {
             MainWindow(manager: manager)
