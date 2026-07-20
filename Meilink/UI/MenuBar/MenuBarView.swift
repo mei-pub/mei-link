@@ -2,7 +2,10 @@ import SwiftUI
 
 struct MenuBarView: View {
     @ObservedObject var manager: TunnelManager
-    @Environment(\.openWindow) private var openWindow
+    let openMainWindow: () -> Void
+    let openSettingsWindow: () -> Void
+    let openSetupWindow: () -> Void
+    let closePopover: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -15,7 +18,7 @@ struct MenuBarView: View {
         .background(.regularMaterial)
         .onAppear {
             if !manager.isConfigured {
-                openAppWindow(id: "setup")
+                openSetupWindow()
             }
         }
     }
@@ -94,7 +97,8 @@ struct MenuBarView: View {
                 .foregroundColor(.secondary)
             Spacer()
             Button("添加") {
-                openAppWindow(id: "main")
+                closePopover()
+                openMainWindow()
             }
             .buttonStyle(.borderless)
         }
@@ -162,11 +166,17 @@ struct MenuBarView: View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
                 panelButton("主窗口", systemImage: "rectangle.stack") {
-                    openAppWindow(id: "main")
+                    closePopover()
+                    openMainWindow()
                 }
 
                 panelButton("服务器", systemImage: "server.rack") {
-                    openAppWindow(id: manager.isConfigured ? "settings" : "setup")
+                    closePopover()
+                    if manager.isConfigured {
+                        openSettingsWindow()
+                    } else {
+                        openSetupWindow()
+                    }
                 }
             }
 
@@ -210,10 +220,5 @@ struct MenuBarView: View {
     private func copy(_ value: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
-    }
-
-    private func openAppWindow(id: String) {
-        openWindow(id: id)
-        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 }
