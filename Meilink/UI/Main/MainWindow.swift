@@ -28,6 +28,8 @@ struct MainWindow: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 16) {
+            appLogo
+
             VStack(alignment: .leading, spacing: 4) {
                 Text("Meilink")
                     .font(.title2)
@@ -69,6 +71,15 @@ struct MainWindow: View {
             }
         }
         .padding(20)
+    }
+
+    private var appLogo: some View {
+        Image(nsImage: NSApp.applicationIconImage)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 42, height: 42)
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .shadow(color: .black.opacity(0.12), radius: 4, x: 0, y: 2)
     }
 
     private var statusIndicator: some View {
