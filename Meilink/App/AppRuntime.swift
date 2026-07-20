@@ -115,7 +115,7 @@ final class AppWindowController {
         mainWindow = showWindow(
             existing: mainWindow,
             title: "Meilink",
-            size: NSSize(width: 760, height: 520)
+            size: NSSize(width: 980, height: 620)
         ) {
             MainWindow(manager: manager)
         }

@@ -11,23 +11,8 @@ struct MeilinkApp: App {
     }
 
     var body: some Scene {
-        Window("Meilink", id: "main") {
-            MainWindow(manager: manager)
-        }
-        .defaultSize(width: 980, height: 520)
-
-        Window("首次配置", id: "setup") {
-            SetupView(manager: manager)
-        }
-        .defaultSize(width: 500, height: 500)
-
-        Window("设置", id: "settings") {
-            SettingsView(manager: manager)
-        }
-        .defaultSize(width: 900, height: 720)
-
         Settings {
-            SettingsView(manager: manager)
+            EmptyView()
         }
     }
 
@@ -55,6 +40,11 @@ final class MeilinkAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        runtime.windows.showMainWindow()
+        return true
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
