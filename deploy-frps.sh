@@ -8,21 +8,48 @@ set -e
 
 # 配置区域 - 修改以下参数
 FRP_VERSION="v0.70.0"
-FRPS_PORT=7000          # 客户端连接端口
-HTTP_PORT=8080          # HTTP 子域名访问端口
-HTTPS_PORT=8443         # HTTPS 子域名访问端口
-AUTH_TOKEN="your-secret-token-here"  # 认证密钥，改成你自己的！
-SUB_DOMAIN_HOST="tunnel.yourdomain.com"  # 子域名基域，改成你的域名
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/frps.toml"
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "找不到 frps 配置文件: $CONFIG_FILE"
+    echo "请把 frps.toml 和 deploy-frps.sh 放在同一目录，并先修改其中的域名和 Token。"
+    exit 1
+fi
+
+get_toml_value() {
+    local key="$1"
+    awk -F= -v key="$key" '
+        {
+            left = $1
+            gsub(/^[ \t]+|[ \t]+$/, "", left)
+            if (left == key) {
+                val = $0
+                sub(/^[^=]*=/, "", val)
+                gsub(/^[ \t]+|[ \t]+$/, "", val)
+                gsub(/^"|"$/, "", val)
+                print val
+            }
+        }
+    ' "$CONFIG_FILE" | tail -n 1
+}
+
+FRPS_PORT="$(get_toml_value bindPort)"
+HTTP_PORT="$(get_toml_value vhostHTTPPort)"
+HTTPS_PORT="$(get_toml_value vhostHTTPSPort)"
+SUB_DOMAIN_HOST="$(get_toml_value subDomainHost)"
 
 echo "=========================================="
 echo "  Meilink frps 服务端部署"
 echo "=========================================="
 echo ""
+echo "使用配置文件: $CONFIG_FILE"
+echo ""
 echo "配置信息:"
-echo "  - 客户端端口: $FRPS_PORT"
-echo "  - HTTP 端口: $HTTP_PORT"
-echo "  - HTTPS 端口: $HTTPS_PORT"
-echo "  - 子域名基域: $SUB_DOMAIN_HOST"
+echo "  - 客户端端口: ${FRPS_PORT:-未配置}"
+echo "  - HTTP 端口: ${HTTP_PORT:-未配置}"
+echo "  - HTTPS 端口: ${HTTPS_PORT:-未配置}"
+echo "  - 子域名基域: ${SUB_DOMAIN_HOST:-未配置}"
 echo ""
 
 # 检测系统架构
@@ -51,27 +78,9 @@ sudo chmod +x /usr/local/bin/frps
 # 创建配置目录
 sudo mkdir -p /etc/frps
 
-# 生成配置文件
-echo "正在生成配置文件..."
-sudo tee /etc/frps/frps.toml > /dev/null <<EOF
-# frps 配置文件 - 由 Meilink 部署脚本生成
-
-# 监听端口（客户端连接端口）
-bindPort = $FRPS_PORT
-
-# HTTP vhost 端口（子域名访问）
-vhostHTTPPort = $HTTP_PORT
-
-# HTTPS vhost 端口
-vhostHTTPSPort = $HTTPS_PORT
-
-# 子域名基域（需要在 DNS 配置泛解析）
-subDomainHost = "$SUB_DOMAIN_HOST"
-
-# 认证配置
-auth.method = "token"
-auth.token = "$AUTH_TOKEN"
-EOF
+# 安装配置文件
+echo "正在安装配置文件..."
+sudo install -m 600 "$CONFIG_FILE" /etc/frps/frps.toml
 
 # 创建 systemd 服务
 echo "正在创建系统服务..."
@@ -107,19 +116,19 @@ echo "  部署完成！"
 echo "=========================================="
 echo ""
 echo "frps 已启动，端口信息:"
-echo "  - 客户端连接端口: $FRPS_PORT"
-echo "  - HTTP 访问端口: $HTTP_PORT"
-echo "  - HTTPS 访问端口: $HTTPS_PORT"
+echo "  - 客户端连接端口: ${FRPS_PORT:-见 /etc/frps/frps.toml}"
+echo "  - HTTP 访问端口: ${HTTP_PORT:-见 /etc/frps/frps.toml}"
+echo "  - HTTPS 访问端口: ${HTTPS_PORT:-见 /etc/frps/frps.toml}"
 echo ""
 echo "下一步："
 echo "  1. 在域名管理处添加 DNS 泛解析:"
-echo "     *.$SUB_DOMAIN_HOST  →  A  →  $(curl -s ifconfig.me)"
+echo "     *.${SUB_DOMAIN_HOST:-你的子域名基域}  →  A  →  $(curl -s ifconfig.me)"
 echo ""
 echo "  2. 在 macOS 上配置 Meilink:"
 echo "     - 服务器地址: $(curl -s ifconfig.me)"
-echo "     - 端口: $FRPS_PORT"
-echo "     - Token: $AUTH_TOKEN"
-echo "     - 子域名基域: $SUB_DOMAIN_HOST"
+echo "     - 端口: ${FRPS_PORT:-见 /etc/frps/frps.toml}"
+echo "     - Token: 使用 /etc/frps/frps.toml 中的 auth.token"
+echo "     - 子域名基域: ${SUB_DOMAIN_HOST:-见 /etc/frps/frps.toml}"
 echo ""
 echo "常用命令:"
 echo "  - 查看状态: sudo systemctl status frps"
