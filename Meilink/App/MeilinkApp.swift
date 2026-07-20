@@ -15,24 +15,8 @@ struct MeilinkApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra {
-            MenuBarView(
-                manager: manager,
-                openMainWindow: { AppRuntime.shared.windows.showMainWindow() },
-                openSettingsWindow: { AppRuntime.shared.windows.showSettingsWindow() },
-                openSetupWindow: { AppRuntime.shared.windows.showSetupWindow() },
-                closePopover: {}
-            )
-        } label: {
-            HStack(spacing: 4) {
-                Image(nsImage: AppIconProvider.image)
-                Text("Meilink")
-            }
-        }
-        .menuBarExtraStyle(.menu)
-
         Settings {
-            EmptyView()
+            SettingsView(manager: manager)
         }
     }
 }

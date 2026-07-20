@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var saveError: String?
     @State private var testMessage: String?
     @State private var testSucceeded = false
+    @State private var showQuitConfirmation = false
 
     var onClose: (() -> Void)? = nil
 
@@ -47,9 +48,21 @@ struct SettingsView: View {
             Divider()
             footer
         }
-        .frame(width: 760, height: 820)
+        .frame(width: 760, height: 840)
         .onAppear {
             loadFields()
+        }
+        .confirmationDialog(
+            "确定要完全退出 Meilink？",
+            isPresented: $showQuitConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("退出 Meilink", role: .destructive) {
+                quitApplication()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("退出后会停止当前 frpc 隧道，菜单栏入口也会消失。")
         }
     }
 
@@ -179,6 +192,15 @@ struct SettingsView: View {
                     AppRuntime.shared.rebuildStatusBar()
                 } label: {
                     Label("重建图标", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .buttonStyle(.bordered)
+            }
+
+            settingsRow("退出程序") {
+                Button(role: .destructive) {
+                    showQuitConfirmation = true
+                } label: {
+                    Label("完全退出 Meilink", systemImage: "power")
                 }
                 .buttonStyle(.bordered)
             }
@@ -375,6 +397,14 @@ struct SettingsView: View {
             onClose()
         } else {
             dismiss()
+        }
+    }
+
+    private func quitApplication() {
+        Task {
+            await manager.stop()
+            MeilinkAppDelegate.allowQuit = true
+            NSApplication.shared.terminate(nil)
         }
     }
 }

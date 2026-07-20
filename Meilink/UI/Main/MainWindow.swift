@@ -11,7 +11,10 @@ struct MainWindow: View {
             Divider()
             footer
         }
-        .frame(minWidth: 980, minHeight: 680)
+        .frame(minWidth: 980, minHeight: 740)
+        .onAppear {
+            AppRuntime.shared.installStatusBar()
+        }
     }
 
     private var header: some View {
@@ -82,9 +85,9 @@ struct MainWindow: View {
                 .frame(width: 10, height: 10)
             Text(statusText)
                 .font(.subheadline)
-        .fontWeight(.medium)
-        .lineLimit(1)
-        .fixedSize(horizontal: true, vertical: false)
+                .fontWeight(.medium)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .frame(width: 128, height: 46)
         .background(Color.secondary.opacity(0.08))

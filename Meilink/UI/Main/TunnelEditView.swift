@@ -22,8 +22,8 @@ struct TunnelEditView: View {
         VStack(spacing: 0) {
             header
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+            VStack {
+                VStack(alignment: .leading, spacing: 16) {
                     formSection("基本信息") {
                         formRow("隧道名称") {
                             TextField("例如 admin", text: $name)
@@ -81,12 +81,13 @@ struct TunnelEditView: View {
                     }
                 }
                 .padding(.horizontal, 28)
-                .padding(.vertical, 22)
+                .padding(.vertical, 16)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
 
             footer
         }
-        .frame(width: 620, height: 640)
+        .frame(width: 660, height: 800)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             if let tunnel = tunnel {

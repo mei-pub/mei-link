@@ -8,62 +8,68 @@ final class AppRuntime {
 
     let manager: TunnelManager
     let windows: AppWindowController
-    private var statusBar: StatusBarController?
+    let statusBar: StatusBarController
 
     private init() {
         manager = TunnelManager()
         windows = AppWindowController(manager: manager)
+        statusBar = StatusBarController(manager: manager, windows: windows)
     }
 
     func installStatusBar() {
-        if statusBar == nil {
-            statusBar = StatusBarController(manager: manager, windows: windows)
-        }
-        statusBar?.rebuild()
+        statusBar.install()
     }
 
     func rebuildStatusBar() {
-        statusBar?.rebuild()
+        statusBar.rebuild()
     }
 }
 
 @MainActor
-final class StatusBarController {
-    private static let autosaveName = "Meilink.StatusBarItem.v3"
-
+final class StatusBarController: NSObject {
     private let manager: TunnelManager
     private let windows: AppWindowController
     private let popover = NSPopover()
     private var statusItem: NSStatusItem?
-    private var cancellable: AnyCancellable?
+    private var cancellables: Set<AnyCancellable> = []
 
     init(manager: TunnelManager, windows: AppWindowController) {
         self.manager = manager
         self.windows = windows
+        super.init()
+    }
 
-        configurePopover()
-        rebuild()
-
-        cancellable = manager.objectWillChange.sink { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.updateButton()
-            }
+    func install() {
+        guard statusItem == nil else {
+            updateButton()
+            return
         }
+
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem?.isVisible = true
+        configurePopover()
+        configureButton()
+        updateButton()
+
+        manager.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.updateButton()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     func rebuild() {
         if let statusItem {
             NSStatusBar.system.removeStatusItem(statusItem)
         }
+        statusItem = nil
+        cancellables.removeAll()
+        install()
+    }
 
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.autosaveName = Self.autosaveName
-        item.isVisible = true
-        statusItem = item
-
-        forceStatusItemVisibility()
-
-        configureButton()
+    func refresh() {
         updateButton()
     }
 
@@ -81,29 +87,13 @@ final class StatusBarController {
         )
     }
 
-    private func forceStatusItemVisibility() {
-        let defaults = UserDefaults.standard
-        defaults.set(true, forKey: "NSStatusItem Visible \(Self.autosaveName)")
-        defaults.set(true, forKey: "NSStatusItem VisibleCC \(Self.autosaveName)")
-        defaults.removeObject(forKey: "NSStatusItem Visible Item-0")
-        defaults.removeObject(forKey: "NSStatusItem VisibleCC Item-0")
-        defaults.synchronize()
-
-        guard let bundleID = Bundle.main.bundleIdentifier as CFString? else { return }
-        CFPreferencesSetAppValue("NSStatusItem Visible \(Self.autosaveName)" as CFString, kCFBooleanTrue, bundleID)
-        CFPreferencesSetAppValue("NSStatusItem VisibleCC \(Self.autosaveName)" as CFString, kCFBooleanTrue, bundleID)
-        CFPreferencesSetAppValue("NSStatusItem Visible Item-0" as CFString, nil, bundleID)
-        CFPreferencesSetAppValue("NSStatusItem VisibleCC Item-0" as CFString, nil, bundleID)
-        CFPreferencesAppSynchronize(bundleID)
-    }
-
     private func configureButton() {
         guard let button = statusItem?.button else { return }
         button.target = self
         button.action = #selector(togglePopover(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        button.imagePosition = .imageOnly
-        button.title = ""
+        button.imagePosition = .imageLeading
+        button.title = "Meilink"
         button.appearsDisabled = false
     }
 
@@ -118,30 +108,34 @@ final class StatusBarController {
 
         switch manager.appSettings.menuBarIconStyle {
         case .text:
-            statusItem?.length = 78
+            statusItem?.length = NSStatusItem.variableLength
             button.imagePosition = .noImage
             button.image = nil
-            button.title = status.title
+            applyMenuBarTitle(status.title, to: button)
         case .appIcon:
-            statusItem?.length = 92
-            button.imagePosition = .imageLeading
-            button.title = "Meilink"
-            button.image = resizedApplicationIcon()
+            statusItem?.length = 44
+            button.imagePosition = .noImage
+            button.image = nil
+            applyMenuBarTitle("Mei", to: button)
         case .link:
-            statusItem?.length = NSStatusItem.squareLength
-            button.imagePosition = .imageOnly
-            button.title = ""
-            if let image = NSImage(systemSymbolName: status.imageName, accessibilityDescription: "Meilink") {
-                image.isTemplate = true
-                button.image = image
-            } else {
-                button.image = nil
-                button.title = "Meilink"
-                statusItem?.length = NSStatusItem.variableLength
-            }
+            statusItem?.length = 44
+            button.imagePosition = .noImage
+            button.image = nil
+            applyMenuBarTitle("Mei", to: button)
         }
 
         button.toolTip = "Meilink - \(status.title)"
+    }
+
+    private func applyMenuBarTitle(_ title: String, to button: NSStatusBarButton) {
+        button.title = title
+        button.attributedTitle = NSAttributedString(
+            string: title,
+            attributes: [
+                .font: NSFont.menuBarFont(ofSize: 13),
+                .foregroundColor: NSColor.white
+            ]
+        )
     }
 
     private func resizedApplicationIcon() -> NSImage {
@@ -150,6 +144,53 @@ final class StatusBarController {
             ?? NSImage(size: NSSize(width: 18, height: 18))
         icon.size = NSSize(width: 18, height: 18)
         return icon
+    }
+
+    private func makeLinkIcon(systemName: String) -> NSImage {
+        if let image = NSImage(systemSymbolName: systemName, accessibilityDescription: "Meilink") {
+            image.isTemplate = true
+            image.size = NSSize(width: 18, height: 18)
+            return image
+        }
+
+        let image = NSImage(size: NSSize(width: 18, height: 18))
+        image.lockFocus()
+        NSColor.black.setStroke()
+
+        let path = NSBezierPath()
+        path.lineWidth = 1.8
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        path.move(to: NSPoint(x: 4.2, y: 9))
+        path.line(to: NSPoint(x: 4.2, y: 4.4))
+        path.line(to: NSPoint(x: 6.3, y: 4.4))
+        path.line(to: NSPoint(x: 9, y: 8.2))
+        path.line(to: NSPoint(x: 11.7, y: 4.4))
+        path.line(to: NSPoint(x: 13.8, y: 4.4))
+        path.line(to: NSPoint(x: 13.8, y: 9))
+        path.stroke()
+
+        let linkPath = NSBezierPath()
+        linkPath.lineWidth = 1.8
+        linkPath.lineCapStyle = .round
+        linkPath.move(to: NSPoint(x: 5, y: 12.2))
+        linkPath.curve(
+            to: NSPoint(x: 8.4, y: 12.2),
+            controlPoint1: NSPoint(x: 5.8, y: 14.1),
+            controlPoint2: NSPoint(x: 7.6, y: 14.1)
+        )
+        linkPath.move(to: NSPoint(x: 9.6, y: 12.2))
+        linkPath.curve(
+            to: NSPoint(x: 13, y: 12.2),
+            controlPoint1: NSPoint(x: 10.4, y: 10.3),
+            controlPoint2: NSPoint(x: 12.2, y: 10.3)
+        )
+        linkPath.stroke()
+
+        image.unlockFocus()
+        image.isTemplate = true
+        image.accessibilityDescription = "Meilink"
+        return image
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
@@ -178,7 +219,7 @@ final class AppWindowController {
         mainWindow = showWindow(
             existing: mainWindow,
             title: "Meilink",
-            size: NSSize(width: 1060, height: 760)
+            size: NSSize(width: 1060, height: 820)
         ) {
             MainWindow(manager: manager)
         }
@@ -188,7 +229,7 @@ final class AppWindowController {
         settingsWindow = showWindow(
             existing: settingsWindow,
             title: "设置",
-            size: NSSize(width: 760, height: 820)
+            size: NSSize(width: 760, height: 880)
         ) {
             SettingsView(manager: manager) { [weak self] in
                 self?.settingsWindow?.close()
@@ -210,7 +251,7 @@ final class AppWindowController {
         tunnelWindow = showWindow(
             existing: tunnelWindow,
             title: tunnel == nil ? "添加新隧道" : "编辑隧道",
-            size: NSSize(width: 620, height: 680)
+            size: NSSize(width: 660, height: 840)
         ) {
             TunnelEditView(manager: manager, tunnel: tunnel) { [weak self] in
                 self?.tunnelWindow?.close()
