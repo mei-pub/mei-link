@@ -179,16 +179,24 @@ struct MainWindow: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            if !manager.events.isEmpty {
-                Button {
-                    manager.clearEvents()
-                } label: {
-                    Text("清空日志")
-                        .frame(width: 104, height: 32)
-                }
-                .controlSize(.regular)
-                .buttonStyle(.bordered)
+            Button {
+                AppRuntime.shared.windows.showLogsWindow()
+            } label: {
+                Label("查看日志", systemImage: "doc.text.magnifyingglass")
+                    .frame(width: 112, height: 32)
             }
+            .controlSize(.regular)
+            .buttonStyle(.bordered)
+
+            Button {
+                manager.clearEvents()
+            } label: {
+                Text("清空日志")
+                    .frame(width: 104, height: 32)
+            }
+            .controlSize(.regular)
+            .buttonStyle(.bordered)
+            .disabled(manager.events.isEmpty)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)

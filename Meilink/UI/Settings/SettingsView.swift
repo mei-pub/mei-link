@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @ObservedObject var manager: TunnelManager
@@ -20,6 +21,11 @@ struct SettingsView: View {
     @State private var showQuitConfirmation = false
 
     var onClose: (() -> Void)? = nil
+    private static let logTimestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -209,6 +215,25 @@ struct SettingsView: View {
 
     private var eventsCard: some View {
         settingsSection(title: "最近事件") {
+            HStack(spacing: 10) {
+                Button {
+                    AppRuntime.shared.windows.showLogsWindow()
+                } label: {
+                    Label("查看完整日志", systemImage: "doc.text.magnifyingglass")
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    copyRecentEvents()
+                } label: {
+                    Label("复制最近事件", systemImage: "doc.on.doc")
+                }
+                .buttonStyle(.bordered)
+                .disabled(manager.events.isEmpty)
+
+                Spacer()
+            }
+
             if manager.events.isEmpty {
                 Text("暂无事件")
                     .font(.caption)
@@ -230,6 +255,19 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private func copyRecentEvents() {
+        let text = manager.events
+            .prefix(20)
+            .reversed()
+            .map { event in
+                "[\(Self.logTimestampFormatter.string(from: event.timestamp))] [\(event.level.rawValue)] \(event.message)"
+            }
+            .joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        manager.addEvent("最近事件已复制到剪贴板")
     }
 
     private var footer: some View {

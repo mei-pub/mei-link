@@ -5,6 +5,7 @@ struct MenuBarView: View {
     let openMainWindow: () -> Void
     let openSettingsWindow: () -> Void
     let openSetupWindow: () -> Void
+    let openLogsWindow: () -> Void
     let closePopover: () -> Void
 
     var body: some View {
@@ -170,6 +171,13 @@ struct MenuBarView: View {
                     openMainWindow()
                 }
 
+                panelButton("日志", systemImage: "doc.text.magnifyingglass") {
+                    closePopover()
+                    openLogsWindow()
+                }
+            }
+
+            HStack(spacing: 8) {
                 panelButton("服务器", systemImage: "server.rack") {
                     closePopover()
                     if manager.isConfigured {
@@ -178,9 +186,7 @@ struct MenuBarView: View {
                         openSetupWindow()
                     }
                 }
-            }
 
-            HStack(spacing: 8) {
                 panelButton("重启", systemImage: "arrow.clockwise") {
                     Task { await manager.restart() }
                 }

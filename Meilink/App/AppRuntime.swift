@@ -211,6 +211,10 @@ final class StatusBarController: NSObject {
                     self?.closePanel()
                     self?.windows.showSetupWindow()
                 },
+                openLogsWindow: { [weak self] in
+                    self?.closePanel()
+                    self?.windows.showLogsWindow()
+                },
                 closePopover: { [weak self] in self?.closePanel() }
             )
         }
@@ -311,6 +315,7 @@ final class AppWindowController {
     private var settingsWindow: NSWindow?
     private var setupWindow: NSWindow?
     private var tunnelWindow: NSWindow?
+    private var logsWindow: NSWindow?
 
     init(manager: TunnelManager) {
         self.manager = manager
@@ -357,6 +362,16 @@ final class AppWindowController {
             TunnelEditView(manager: manager, tunnel: tunnel) { [weak self] in
                 self?.tunnelWindow?.close()
             }
+        }
+    }
+
+    func showLogsWindow() {
+        logsWindow = showWindow(
+            existing: logsWindow,
+            title: "日志",
+            size: NSSize(width: 820, height: 620)
+        ) {
+            LogWindowView(manager: manager)
         }
     }
 

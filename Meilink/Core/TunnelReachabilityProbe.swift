@@ -8,14 +8,9 @@ enum TunnelReachabilityResult: Sendable {
 }
 
 final class TunnelReachabilityProbe {
-    private let session: URLSession
     private let tcpTimeout: TimeInterval
 
     init(timeout: TimeInterval = 4.0) {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = timeout
-        config.timeoutIntervalForResource = timeout
-        self.session = URLSession(configuration: config)
         self.tcpTimeout = timeout
     }
 
@@ -26,8 +21,8 @@ final class TunnelReachabilityProbe {
 
         switch tunnel.type {
         case .http:
-            guard let url = externalURL(for: tunnel) else { return .skipped }
-            return await checkHTTP(url)
+            guard let endpoint = endpoint(for: tunnel, defaultPort: 80) else { return .skipped }
+            return await checkTCP(host: endpoint.host, port: endpoint.port)
         case .https:
             guard let endpoint = endpoint(for: tunnel, defaultPort: 443) else { return .skipped }
             return await checkTCP(host: endpoint.host, port: endpoint.port)
@@ -37,11 +32,6 @@ final class TunnelReachabilityProbe {
         case .udp:
             return .skipped
         }
-    }
-
-    private func externalURL(for tunnel: Tunnel) -> URL? {
-        guard let remoteAddr = tunnel.remoteAddr, !remoteAddr.isEmpty else { return nil }
-        return URL(string: "http://\(remoteAddr)")
     }
 
     private func endpoint(for tunnel: Tunnel, defaultPort: Int?) -> (host: String, port: Int)? {
@@ -62,30 +52,6 @@ final class TunnelReachabilityProbe {
 
         guard let defaultPort else { return nil }
         return (host, defaultPort)
-    }
-
-    private func checkHTTP(_ url: URL) async -> TunnelReachabilityResult {
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("bytes=0-2048", forHTTPHeaderField: "Range")
-        request.setValue("Meilink/1.0", forHTTPHeaderField: "User-Agent")
-
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard response is HTTPURLResponse else {
-                return .unreachable("外部 HTTP 无响应")
-            }
-
-            if let body = String(data: data.prefix(4096), encoding: .utf8),
-               body.localizedCaseInsensitiveContains("powered by frp")
-                || body.localizedCaseInsensitiveContains("faithfully yours, frp") {
-                return .unreachable("frps 返回未找到代理")
-            }
-
-            return .reachable
-        } catch {
-            return .unreachable(error.localizedDescription)
-        }
     }
 
     private func checkTCP(host: String, port: Int) async -> TunnelReachabilityResult {
