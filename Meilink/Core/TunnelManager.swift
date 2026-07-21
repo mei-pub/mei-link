@@ -15,7 +15,15 @@ class TunnelManager: ObservableObject {
     private var adminAPI: FrpcAdminAPI?
     private let configGenerator = ConfigGenerator()
     private let store = TunnelStore()
+    private let reachabilityProbe = TunnelReachabilityProbe()
     private var statusTimer: Timer?
+    private var isPollingStatus = false
+    private var isRecovering = false
+    private var consecutiveFailures = 0
+    private var lastRecoveryAt: Date?
+
+    private let maxConsecutiveFailuresBeforeRecovery = 3
+    private let recoveryCooldown: TimeInterval = 20
 
     private let logger = Logger(subsystem: "com.meilink", category: "TunnelManager")
 
@@ -222,31 +230,125 @@ class TunnelManager: ObservableObject {
     // MARK: - Status Polling
 
     private func startStatusPolling() {
+        statusTimer?.invalidate()
         statusTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.pollStatus()
             }
         }
+        Task { @MainActor in
+            await pollStatus()
+        }
     }
 
     private func pollStatus() async {
-        guard adminAPI != nil else { return }
+        guard !isPollingStatus else { return }
+        isPollingStatus = true
+        defer { isPollingStatus = false }
+
+        guard let adminAPI else {
+            await recordConnectivityFailure(reason: "Admin API 未初始化")
+            return
+        }
+
+        guard frpcProcess.isRunning else {
+            isFrpcRunning = false
+            await recordConnectivityFailure(reason: "frpc 进程已退出")
+            return
+        }
 
         do {
-            let statusResponse = try await adminAPI?.getStatus()
+            let statusResponse = try await adminAPI.getStatus()
 
             for idx in tunnels.indices {
                 let tunnel = tunnels[idx]
-                if let proxyStatuses = statusResponse?[tunnel.type.rawValue],
+                if let proxyStatuses = statusResponse[tunnel.type.rawValue],
                    let status = proxyStatuses.first(where: { $0.name == tunnel.name }) {
                     tunnels[idx] = tunnel.updatedStatus(from: status)
+                } else if tunnel.enabled {
+                    tunnels[idx].status = .checkFailed
+                    tunnels[idx].errorMessage = "frpc 未返回该隧道状态"
                 }
             }
 
+            let enabledTunnels = tunnels.filter(\.enabled)
+            let unhealthyTunnels = enabledTunnels.filter { tunnel in
+                tunnel.status != .running || tunnel.errorMessage != nil
+            }
+
+            if !unhealthyTunnels.isEmpty {
+                let names = unhealthyTunnels.map(\.name).joined(separator: ", ")
+                await recordConnectivityFailure(reason: "隧道状态异常: \(names)")
+                return
+            }
+
+            let unreachableTunnels = await probeReachability(for: enabledTunnels)
+            if !unreachableTunnels.isEmpty {
+                await recordConnectivityFailure(reason: "外网探活失败: \(unreachableTunnels.joined(separator: ", "))")
+                return
+            }
+
+            consecutiveFailures = 0
+            isFrpcRunning = true
             isConnected = true
         } catch {
-            isConnected = false
+            await recordConnectivityFailure(reason: "状态检测失败: \(error.localizedDescription)")
         }
+    }
+
+    private func probeReachability(for tunnels: [Tunnel]) async -> [String] {
+        var failed: [String] = []
+        for tunnel in tunnels {
+            let result = await reachabilityProbe.check(tunnel: tunnel, serverConfig: serverConfig)
+            switch result {
+            case .reachable, .skipped:
+                continue
+            case .unreachable(let reason):
+                if let idx = self.tunnels.firstIndex(where: { $0.id == tunnel.id }) {
+                    self.tunnels[idx].status = .checkFailed
+                    self.tunnels[idx].errorMessage = reason
+                }
+                failed.append(tunnel.name)
+            }
+        }
+        return failed
+    }
+
+    private func recordConnectivityFailure(reason: String) async {
+        consecutiveFailures += 1
+        isConnected = false
+
+        if consecutiveFailures == 1 {
+            addEvent("连接检测失败: \(reason)", level: .warning)
+        }
+
+        guard consecutiveFailures >= maxConsecutiveFailuresBeforeRecovery else { return }
+        await recoverConnection(reason: reason)
+    }
+
+    private func recoverConnection(reason: String) async {
+        guard !isRecovering else { return }
+
+        if let lastRecoveryAt,
+           Date().timeIntervalSince(lastRecoveryAt) < recoveryCooldown {
+            return
+        }
+
+        isRecovering = true
+        lastRecoveryAt = Date()
+        addEvent("连接连续异常，正在自动重连: \(reason)", level: .warning)
+
+        statusTimer?.invalidate()
+        statusTimer = nil
+
+        frpcProcess.stopImmediately()
+        isFrpcRunning = false
+        isConnected = false
+
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        consecutiveFailures = 0
+        await start()
+        isRecovering = false
     }
 
     private func waitForAdminAPI(timeout: TimeInterval) async throws {
