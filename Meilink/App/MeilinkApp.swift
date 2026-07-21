@@ -1,22 +1,21 @@
-import SwiftUI
+import AppKit
 
 @main
-struct MeilinkApp: App {
-    @NSApplicationDelegateAdaptor(MeilinkAppDelegate.self) private var appDelegate
-    @StateObject private var manager = AppRuntime.shared.manager
-
-    init() {
+enum MeilinkMain {
+    @MainActor
+    static func main() {
         ProcessInfo.processInfo.disableAutomaticTermination("Meilink runs from the menu bar")
         ProcessInfo.processInfo.disableSuddenTermination()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            AppRuntime.shared.installStatusBar()
-            AppRuntime.shared.windows.showMainWindow()
-        }
-    }
 
-    var body: some Scene {
-        Settings {
-            SettingsView(manager: manager)
+        let app = NSApplication.shared
+        let delegate = MeilinkAppDelegate()
+        app.delegate = delegate
+        app.setActivationPolicy(.accessory)
+        app.finishLaunching()
+        delegate.start()
+
+        withExtendedLifetime(delegate) {
+            app.run()
         }
     }
 }
@@ -26,11 +25,19 @@ final class MeilinkAppDelegate: NSObject, NSApplicationDelegate {
     static var allowQuit = false
 
     private let runtime = AppRuntime.shared
+    private var didStart = false
+
+    func start() {
+        guard !didStart else { return }
+        didStart = true
+        runtime.installStatusBar()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [runtime] in
+            runtime.windows.showMainWindow()
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
-        ProcessInfo.processInfo.disableAutomaticTermination("Meilink runs from the menu bar")
-        ProcessInfo.processInfo.disableSuddenTermination()
+        start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

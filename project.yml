@@ -22,7 +22,7 @@ targets:
       properties:
         CFBundleName: Meilink
         CFBundleDisplayName: Meilink
-        CFBundleIdentifier: com.meilink.app
+        CFBundleIdentifier: vip.rego.meilink
         CFBundleIconFile: AppIcon
         CFBundleVersion: "1.0"
         CFBundleShortVersionString: "1.0.0"

@@ -93,7 +93,7 @@ final class StatusBarController: NSObject {
         button.action = #selector(togglePopover(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         button.imagePosition = .imageLeading
-        button.title = "Meilink"
+        button.title = "Mei"
         button.appearsDisabled = false
     }
 
@@ -108,22 +108,21 @@ final class StatusBarController: NSObject {
 
         switch manager.appSettings.menuBarIconStyle {
         case .text:
-            statusItem?.length = NSStatusItem.variableLength
+            statusItem?.length = 68
             button.imagePosition = .noImage
             button.image = nil
             applyMenuBarTitle(status.title, to: button)
         case .appIcon:
-            statusItem?.length = 44
-            button.imagePosition = .noImage
-            button.image = nil
+            statusItem?.length = 82
+            button.imagePosition = .imageLeading
+            button.image = resizedApplicationIcon()
             applyMenuBarTitle("Mei", to: button)
         case .link:
-            statusItem?.length = 44
-            button.imagePosition = .noImage
-            button.image = nil
+            statusItem?.length = 62
+            button.imagePosition = .imageLeading
+            button.image = makeLinkIcon(systemName: status.imageName)
             applyMenuBarTitle("Mei", to: button)
         }
-
         button.toolTip = "Meilink - \(status.title)"
     }
 
@@ -132,8 +131,8 @@ final class StatusBarController: NSObject {
         button.attributedTitle = NSAttributedString(
             string: title,
             attributes: [
-                .font: NSFont.menuBarFont(ofSize: 13),
-                .foregroundColor: NSColor.white
+                .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+                .foregroundColor: NSColor.labelColor
             ]
         )
     }

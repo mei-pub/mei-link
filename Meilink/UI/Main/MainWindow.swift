@@ -12,9 +12,6 @@ struct MainWindow: View {
             footer
         }
         .frame(minWidth: 980, minHeight: 740)
-        .onAppear {
-            AppRuntime.shared.installStatusBar()
-        }
     }
 
     private var header: some View {
