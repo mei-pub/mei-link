@@ -21,6 +21,7 @@ struct AppSettings: Codable, Sendable {
     var launchAtLogin: Bool
     var showInDock: Bool
     var statusPollingInterval: TimeInterval
+    var remoteReachabilityInterval: TimeInterval
     var menuBarIconStyle: MenuBarIconStyle
 
     init(
@@ -28,13 +29,34 @@ struct AppSettings: Codable, Sendable {
         launchAtLogin: Bool = false,
         showInDock: Bool = false,
         statusPollingInterval: TimeInterval = 3.0,
+        remoteReachabilityInterval: TimeInterval = 60.0,
         menuBarIconStyle: MenuBarIconStyle = .appIcon
     ) {
         self.autoStart = autoStart
         self.launchAtLogin = launchAtLogin
         self.showInDock = showInDock
         self.statusPollingInterval = statusPollingInterval
+        self.remoteReachabilityInterval = remoteReachabilityInterval
         self.menuBarIconStyle = menuBarIconStyle
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case autoStart
+        case launchAtLogin
+        case showInDock
+        case statusPollingInterval
+        case remoteReachabilityInterval
+        case menuBarIconStyle
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        autoStart = try container.decodeIfPresent(Bool.self, forKey: .autoStart) ?? true
+        launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
+        showInDock = try container.decodeIfPresent(Bool.self, forKey: .showInDock) ?? false
+        statusPollingInterval = try container.decodeIfPresent(TimeInterval.self, forKey: .statusPollingInterval) ?? 3.0
+        remoteReachabilityInterval = try container.decodeIfPresent(TimeInterval.self, forKey: .remoteReachabilityInterval) ?? 60.0
+        menuBarIconStyle = try container.decodeIfPresent(MenuBarIconStyle.self, forKey: .menuBarIconStyle) ?? .appIcon
     }
 }
 

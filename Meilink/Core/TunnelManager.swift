@@ -25,7 +25,6 @@ class TunnelManager: ObservableObject {
 
     private let maxConsecutiveFailuresBeforeRecovery = 3
     private let recoveryCooldown: TimeInterval = 20
-    private let remoteReachabilityInterval: TimeInterval = 60
 
     private let logger = Logger(subsystem: "com.meilink", category: "TunnelManager")
 
@@ -350,7 +349,8 @@ class TunnelManager: ObservableObject {
 
     private func shouldProbeReachability() -> Bool {
         guard let lastReachabilityProbeAt else { return true }
-        return Date().timeIntervalSince(lastReachabilityProbeAt) >= remoteReachabilityInterval
+        let interval = min(max(appSettings.remoteReachabilityInterval, 30), 600)
+        return Date().timeIntervalSince(lastReachabilityProbeAt) >= interval
     }
 
     private func probeReachability(for tunnels: [Tunnel]) async -> [String] {

@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var isTesting = false
     @State private var showToken = false
     @State private var menuBarIconStyle: MenuBarIconStyle = .link
+    @State private var remoteReachabilityInterval: Double = 60
     @State private var saveError: String?
     @State private var testMessage: String?
     @State private var testSucceeded = false
@@ -202,6 +203,20 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
             }
 
+            settingsRow("远程探测间隔") {
+                Stepper(value: $remoteReachabilityInterval, in: 30...600, step: 15) {
+                    Text("\(Int(remoteReachabilityInterval)) 秒")
+                        .frame(width: 68, alignment: .leading)
+                }
+                .onChange(of: remoteReachabilityInterval) { newValue in
+                    updateRemoteReachabilityInterval(newValue)
+                }
+
+                Text("降低外部端口探测频率，只影响远程可达性验证。")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             settingsRow("退出程序") {
                 Button(role: .destructive) {
                     showQuitConfirmation = true
@@ -345,6 +360,7 @@ struct SettingsView: View {
         }
         launchAtLogin = AutoStartManager.isEnabled
         menuBarIconStyle = manager.appSettings.menuBarIconStyle
+        remoteReachabilityInterval = min(max(manager.appSettings.remoteReachabilityInterval, 30), 600)
     }
 
     private func testConnection() {
@@ -390,6 +406,17 @@ struct SettingsView: View {
             AppRuntime.shared.rebuildStatusBar()
         } catch {
             manager.addEvent("保存菜单栏图标设置失败: \(error.localizedDescription)", level: .error)
+        }
+    }
+
+    private func updateRemoteReachabilityInterval(_ interval: Double) {
+        var settings = manager.appSettings
+        settings.remoteReachabilityInterval = min(max(interval, 30), 600)
+        do {
+            try manager.saveAppSettings(settings)
+            manager.addEvent("远程探测间隔已更新为 \(Int(settings.remoteReachabilityInterval)) 秒")
+        } catch {
+            manager.addEvent("保存远程探测间隔失败: \(error.localizedDescription)", level: .error)
         }
     }
 
