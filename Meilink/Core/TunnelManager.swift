@@ -21,9 +21,11 @@ class TunnelManager: ObservableObject {
     private var isRecovering = false
     private var consecutiveFailures = 0
     private var lastRecoveryAt: Date?
+    private var lastReachabilityProbeAt: Date?
 
     private let maxConsecutiveFailuresBeforeRecovery = 3
     private let recoveryCooldown: TimeInterval = 20
+    private let remoteReachabilityInterval: TimeInterval = 60
 
     private let logger = Logger(subsystem: "com.meilink", category: "TunnelManager")
 
@@ -276,7 +278,9 @@ class TunnelManager: ObservableObject {
 
     private func startStatusPolling() {
         statusTimer?.invalidate()
-        statusTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+        lastReachabilityProbeAt = nil
+        let pollingInterval = min(max(appSettings.statusPollingInterval, 3), 30)
+        statusTimer = Timer.scheduledTimer(withTimeInterval: pollingInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.pollStatus()
             }
@@ -327,10 +331,13 @@ class TunnelManager: ObservableObject {
                 return
             }
 
-            let unreachableTunnels = await probeReachability(for: enabledTunnels)
-            if !unreachableTunnels.isEmpty {
-                await recordConnectivityFailure(reason: "外网探活失败: \(unreachableTunnels.joined(separator: ", "))")
-                return
+            if shouldProbeReachability() {
+                let unreachableTunnels = await probeReachability(for: enabledTunnels)
+                lastReachabilityProbeAt = Date()
+                if !unreachableTunnels.isEmpty {
+                    await recordConnectivityFailure(reason: "外网探活失败: \(unreachableTunnels.joined(separator: ", "))")
+                    return
+                }
             }
 
             consecutiveFailures = 0
@@ -339,6 +346,11 @@ class TunnelManager: ObservableObject {
         } catch {
             await recordConnectivityFailure(reason: "状态检测失败: \(error.localizedDescription)")
         }
+    }
+
+    private func shouldProbeReachability() -> Bool {
+        guard let lastReachabilityProbeAt else { return true }
+        return Date().timeIntervalSince(lastReachabilityProbeAt) >= remoteReachabilityInterval
     }
 
     private func probeReachability(for tunnels: [Tunnel]) async -> [String] {
