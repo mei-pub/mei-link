@@ -11,7 +11,7 @@ enum MenuBarIconStyle: String, Codable, CaseIterable, Identifiable, Sendable {
         switch self {
         case .link: return "链路图标"
         case .appIcon: return "应用图标"
-        case .text: return "文字标识"
+        case .text: return "状态图标"
         }
     }
 }

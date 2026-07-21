@@ -92,8 +92,9 @@ final class StatusBarController: NSObject {
         button.target = self
         button.action = #selector(togglePopover(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        button.imagePosition = .imageLeading
-        button.title = "Mei"
+        button.imagePosition = .imageOnly
+        button.title = ""
+        button.attributedTitle = NSAttributedString(string: "")
         button.appearsDisabled = false
     }
 
@@ -106,35 +107,21 @@ final class StatusBarController: NSObject {
             style: manager.appSettings.menuBarIconStyle
         )
 
-        switch manager.appSettings.menuBarIconStyle {
-        case .text:
-            statusItem?.length = 68
-            button.imagePosition = .noImage
-            button.image = nil
-            applyMenuBarTitle(status.title, to: button)
-        case .appIcon:
-            statusItem?.length = 82
-            button.imagePosition = .imageLeading
-            button.image = resizedApplicationIcon()
-            applyMenuBarTitle("Mei", to: button)
-        case .link:
-            statusItem?.length = 62
-            button.imagePosition = .imageLeading
-            button.image = makeLinkIcon(systemName: status.imageName)
-            applyMenuBarTitle("Mei", to: button)
-        }
+        statusItem?.length = NSStatusItem.squareLength
+        button.imagePosition = .imageOnly
+        button.title = ""
+        button.attributedTitle = NSAttributedString(string: "")
+        button.image = menuBarImage(for: status)
         button.toolTip = "Meilink - \(status.title)"
     }
 
-    private func applyMenuBarTitle(_ title: String, to button: NSStatusBarButton) {
-        button.title = title
-        button.attributedTitle = NSAttributedString(
-            string: title,
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
-                .foregroundColor: NSColor.labelColor
-            ]
-        )
+    private func menuBarImage(for status: MenuBarStatusItem) -> NSImage {
+        switch manager.appSettings.menuBarIconStyle {
+        case .appIcon:
+            return resizedApplicationIcon()
+        case .link, .text:
+            return makeLinkIcon(systemName: status.imageName)
+        }
     }
 
     private func resizedApplicationIcon() -> NSImage {
@@ -196,6 +183,7 @@ final class StatusBarController: NSObject {
         if popover.isShown {
             popover.performClose(sender)
         } else {
+            updateButton()
             popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
         }
