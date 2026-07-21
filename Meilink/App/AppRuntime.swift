@@ -29,9 +29,11 @@ final class AppRuntime {
 final class StatusBarController: NSObject {
     private let manager: TunnelManager
     private let windows: AppWindowController
-    private let popover = NSPopover()
+    private let panelSize = NSSize(width: 330, height: 440)
+    private var panel: NSPanel?
     private var statusItem: NSStatusItem?
     private var cancellables: Set<AnyCancellable> = []
+    private var eventMonitors: [Any] = []
 
     init(manager: TunnelManager, windows: AppWindowController) {
         self.manager = manager
@@ -47,7 +49,6 @@ final class StatusBarController: NSObject {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem?.isVisible = true
-        configurePopover()
         configureButton()
         updateButton()
 
@@ -64,6 +65,7 @@ final class StatusBarController: NSObject {
         if let statusItem {
             NSStatusBar.system.removeStatusItem(statusItem)
         }
+        closePanel()
         statusItem = nil
         cancellables.removeAll()
         install()
@@ -71,20 +73,6 @@ final class StatusBarController: NSObject {
 
     func refresh() {
         updateButton()
-    }
-
-    private func configurePopover() {
-        popover.behavior = .transient
-        popover.contentSize = NSSize(width: 330, height: 430)
-        popover.contentViewController = NSHostingController(
-            rootView: MenuBarView(
-                manager: manager,
-                openMainWindow: { [weak self] in self?.windows.showMainWindow() },
-                openSettingsWindow: { [weak self] in self?.windows.showSettingsWindow() },
-                openSetupWindow: { [weak self] in self?.windows.showSetupWindow() },
-                closePopover: { [weak popover] in popover?.performClose(nil) }
-            )
-        )
     }
 
     private func configureButton() {
@@ -180,13 +168,139 @@ final class StatusBarController: NSObject {
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
-        if popover.isShown {
-            popover.performClose(sender)
+        if panel?.isVisible == true {
+            closePanel()
         } else {
             updateButton()
-            popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
-            NSApp.activate(ignoringOtherApps: true)
+            showPanel(relativeTo: sender)
         }
+    }
+
+    private func showPanel(relativeTo sender: NSStatusBarButton) {
+        guard let buttonWindow = sender.window else { return }
+        let screen = buttonWindow.screen ?? NSScreen.main
+        guard let screen else { return }
+
+        let buttonFrame = buttonWindow.convertToScreen(sender.convert(sender.bounds, to: nil))
+        let visibleFrame = screen.visibleFrame
+        let horizontalPadding: CGFloat = 10
+        let verticalGap: CGFloat = 8
+
+        var originX = buttonFrame.midX - panelSize.width / 2
+        originX = min(originX, visibleFrame.maxX - panelSize.width - horizontalPadding)
+        originX = max(originX, visibleFrame.minX + horizontalPadding)
+
+        var originY = buttonFrame.minY - panelSize.height - verticalGap
+        if originY < visibleFrame.minY + horizontalPadding {
+            originY = visibleFrame.maxY - panelSize.height - horizontalPadding
+        }
+
+        let arrowOffset = min(max(buttonFrame.midX - originX, 24), panelSize.width - 24)
+        let content = MenuBarPanelChrome(arrowOffset: arrowOffset) {
+            MenuBarView(
+                manager: manager,
+                openMainWindow: { [weak self] in
+                    self?.closePanel()
+                    self?.windows.showMainWindow()
+                },
+                openSettingsWindow: { [weak self] in
+                    self?.closePanel()
+                    self?.windows.showSettingsWindow()
+                },
+                openSetupWindow: { [weak self] in
+                    self?.closePanel()
+                    self?.windows.showSetupWindow()
+                },
+                closePopover: { [weak self] in self?.closePanel() }
+            )
+        }
+
+        let hostingView = NSHostingView(rootView: content)
+        hostingView.frame = NSRect(origin: .zero, size: panelSize)
+        hostingView.autoresizingMask = [.width, .height]
+
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: panelSize),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentView = hostingView
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = false
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
+        panel.isReleasedWhenClosed = false
+        panel.setFrame(NSRect(x: originX, y: originY, width: panelSize.width, height: panelSize.height), display: true)
+
+        self.panel = panel
+        installEventMonitors(for: panel)
+        panel.orderFrontRegardless()
+    }
+
+    private func closePanel() {
+        panel?.orderOut(nil)
+        panel = nil
+        removeEventMonitors()
+    }
+
+    private func installEventMonitors(for panel: NSPanel) {
+        removeEventMonitors()
+
+        let localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self, weak panel] event in
+            guard let panel else { return event }
+            if event.window !== panel {
+                self?.closePanel()
+            }
+            return event
+        }
+
+        let globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.closePanel()
+        }
+
+        [localMonitor, globalMonitor].compactMap { $0 }.forEach { eventMonitors.append($0) }
+    }
+
+    private func removeEventMonitors() {
+        eventMonitors.forEach { NSEvent.removeMonitor($0) }
+        eventMonitors.removeAll()
+    }
+}
+
+private struct MenuBarPanelChrome<Content: View>: View {
+    let arrowOffset: CGFloat
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                Spacer()
+                    .frame(width: max(0, arrowOffset - 9))
+                Triangle()
+                    .fill(.regularMaterial)
+                    .frame(width: 18, height: 12)
+                Spacer(minLength: 0)
+            }
+            .frame(width: 330, height: 12, alignment: .leading)
+
+            content
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 8)
+        }
+        .frame(width: 330, height: 440, alignment: .top)
+    }
+}
+
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 
