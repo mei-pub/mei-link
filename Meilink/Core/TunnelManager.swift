@@ -28,6 +28,24 @@ class TunnelManager: ObservableObject {
     private let logger = Logger(subsystem: "com.meilink", category: "TunnelManager")
 
     init() {
+        frpcProcess.onOutput = { [weak self] line in
+            self?.addEvent("frpc: \(line)")
+        }
+        frpcProcess.onTermination = { [weak self] status in
+            guard let self else { return }
+            self.isFrpcRunning = false
+            self.isConnected = false
+            self.statusTimer?.invalidate()
+            self.statusTimer = nil
+            for idx in self.tunnels.indices {
+                if self.tunnels[idx].enabled {
+                    self.tunnels[idx].status = .closed
+                    self.tunnels[idx].errorMessage = "frpc 进程已退出，状态码: \(status)"
+                }
+            }
+            self.addEvent("frpc 进程已退出，状态码: \(status)", level: status == 0 ? .info : .error)
+        }
+
         loadConfiguration()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             Task { @MainActor in
@@ -63,7 +81,18 @@ class TunnelManager: ObservableObject {
     }
 
     func start() async {
-        guard !isFrpcRunning else { return }
+        await start(force: false)
+    }
+
+    private func start(force: Bool) async {
+        if isFrpcRunning, frpcProcess.isRunning, !force {
+            return
+        }
+
+        if !frpcProcess.isRunning {
+            isFrpcRunning = false
+            isConnected = false
+        }
 
         guard let config = serverConfig else {
             addEvent("未配置服务器", level: .error)
@@ -77,6 +106,7 @@ class TunnelManager: ObservableObject {
             let configPath = try configGenerator.writeToFile(toml)
             try frpcProcess.start(configPath: configPath)
             isFrpcRunning = true
+            isConnected = false
         } catch {
             addEvent("启动 frpc 失败: \(error.localizedDescription)", level: .error)
             return
@@ -91,15 +121,21 @@ class TunnelManager: ObservableObject {
         do {
             try await waitForAdminAPI(timeout: 5.0)
         } catch {
-            addEvent("Admin API 未就绪，frpc 可能正在重连", level: .warning)
+            addEvent("Admin API 未就绪，启动未完成: \(error.localizedDescription)", level: .error)
+            frpcProcess.stopImmediately()
+            isFrpcRunning = false
+            isConnected = false
+            return
         }
 
         var restoredProxy = false
+        var restoreFailures: [String] = []
         for tunnel in tunnels where tunnel.enabled {
             do {
                 try await adminAPI?.createProxy(tunnel.toProxyDefinition(serverConfig: config))
                 restoredProxy = true
             } catch {
+                restoreFailures.append(tunnel.name)
                 addEvent("恢复隧道 \"\(tunnel.name)\" 失败: \(error.localizedDescription)", level: .warning)
             }
         }
@@ -112,8 +148,13 @@ class TunnelManager: ObservableObject {
             }
         }
 
+        if !restoreFailures.isEmpty {
+            isConnected = false
+            addEvent("部分隧道恢复失败，等待自动重连: \(restoreFailures.joined(separator: ", "))", level: .warning)
+        }
+
         startStatusPolling()
-        addEvent("隧道管理器已启动")
+        addEvent("隧道管理器已启动，正在检测外部可达性")
     }
 
     func startIfNeeded() async {
@@ -207,6 +248,8 @@ class TunnelManager: ObservableObject {
 
         tunnel.enabled = enabled
         if enabled {
+            tunnel.status = .waitStart
+            tunnel.errorMessage = nil
             do {
                 try await adminAPI?.createProxy(tunnel.toProxyDefinition(serverConfig: serverConfig))
                 try await adminAPI?.reload()
@@ -216,6 +259,8 @@ class TunnelManager: ObservableObject {
                 throw error
             }
         } else {
+            tunnel.status = .closed
+            tunnel.errorMessage = nil
             try? await adminAPI?.deleteProxy(name: tunnel.name)
             try? await adminAPI?.reload()
             addEvent("隧道 \"\(tunnel.name)\" 已禁用")
@@ -347,7 +392,7 @@ class TunnelManager: ObservableObject {
 
         try? await Task.sleep(nanoseconds: 1_000_000_000)
         consecutiveFailures = 0
-        await start()
+        await start(force: true)
         isRecovering = false
     }
 
