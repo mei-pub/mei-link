@@ -178,7 +178,7 @@ struct MenuBarView: View {
             }
 
             HStack(spacing: 8) {
-                panelButton("服务器", systemImage: "server.rack") {
+                panelButton("设置", systemImage: "gear") {
                     closePopover()
                     if manager.isConfigured {
                         openSettingsWindow()

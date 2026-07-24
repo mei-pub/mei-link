@@ -4,11 +4,11 @@ import UniformTypeIdentifiers
 
 struct LogWindowView: View {
     @ObservedObject var manager: TunnelManager
-    @State private var selectedEventID: EventLog.ID?
+    @State private var selectedEventIDs: Set<EventLog.ID> = []
     @State private var statusMessage: String?
 
-    private var selectedEvent: EventLog? {
-        manager.events.first { $0.id == selectedEventID }
+    private var selectedEvents: [EventLog] {
+        manager.events.filter { selectedEventIDs.contains($0.id) }
     }
 
     var body: some View {
@@ -70,7 +70,7 @@ struct LogWindowView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            Table(manager.events, selection: $selectedEventID) {
+            Table(manager.events, selection: $selectedEventIDs) {
                 TableColumn("时间") { event in
                     Text(formatTimestamp(event.timestamp))
                         .font(.system(.caption, design: .monospaced))
@@ -95,7 +95,7 @@ struct LogWindowView: View {
                 Button("复制选中日志") {
                     copySelected()
                 }
-                .disabled(selectedEvent == nil)
+                .disabled(selectedEventIDs.isEmpty)
 
                 Button("复制全部日志") {
                     copy(text: formattedLogs(manager.events), message: "已复制全部日志")
@@ -119,11 +119,11 @@ struct LogWindowView: View {
             } label: {
                 Label("复制选中", systemImage: "doc.on.clipboard")
             }
-            .disabled(selectedEvent == nil)
+            .disabled(selectedEventIDs.isEmpty)
 
             Button(role: .destructive) {
                 manager.clearEvents()
-                selectedEventID = nil
+                selectedEventIDs = []
                 statusMessage = "日志已清空"
             } label: {
                 Label("清空日志", systemImage: "trash")
@@ -134,8 +134,8 @@ struct LogWindowView: View {
     }
 
     private func copySelected() {
-        guard let selectedEvent else { return }
-        copy(text: formattedLogs([selectedEvent]), message: "已复制选中日志")
+        guard !selectedEventIDs.isEmpty else { return }
+        copy(text: formattedLogs(selectedEvents), message: "已复制选中日志")
     }
 
     private func copy(text: String, message: String) {

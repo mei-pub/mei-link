@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="styles/app.css">
+<style>
+  .app { display: flex; flex-direction: column; height: 100vh; }
+  .header { display: flex; align-items: center; gap: 12px; padding: 18px 20px; }
+  .header .icon { color: var(--primary); display: flex; }
+  .header h1 { font-size: 18px; font-weight: 700; color: var(--text); }
+  .header .sub { font-size: 12px; color: var(--text-secondary); }
+  .header .actions { margin-left: auto; display: flex; gap: 8px; }
+  .divider { height: 1px; background: var(--border); }
+  .table-area { flex: 1; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { position: sticky; top: 0; background: var(--bg); z-index: 1; }
+  th { text-align: left; padding: 8px 12px; font-size: 11px; color: var(--text-secondary); border-bottom: 1px solid var(--border); font-weight: 500; }
+  td { padding: 6px 12px; font-size: 12px; border-bottom: 1px solid rgba(0,0,0,0.04); vertical-align: top; }
+  td.time { font-family: monospace; color: var(--text-secondary); white-space: nowrap; width: 140px; }
+  td.level { width: 80px; font-weight: 500; }
+  td.level.info { color: var(--primary); } td.level.warning { color: var(--warning); } td.level.error { color: var(--danger); }
+  td.content { user-select: text; color: var(--text); }
+  .footer { display: flex; align-items: center; padding: 12px 20px; gap: 10px; }
+  .footer .spacer { flex: 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <span class="icon" id="logIcon"></span>
+    <div><h1>运行日志</h1><div id="logCount" class="sub">0 条事件</div></div>
+    <div class="actions"><button class="btn btn-sm" id="copyAllBtn"></button><button class="btn btn-sm" id="exportBtn"></button></div>
+  </div>
+  <div class="divider"></div>
+  <div class="table-area">
+    <div id="empty" class="empty-state" style="display:none"><h3 style="font-size:15px;font-weight:600;color:var(--text)">暂无日志</h3><p style="margin-top:6px;font-size:12px">连接检测、自动重连和配置变更会显示在这里。</p></div>
+    <table id="logTable" style="display:none"><thead><tr><th>时间</th><th>级别</th><th>内容</th></tr></thead><tbody id="logBody"></tbody></table>
+  </div>
+  <div class="divider"></div>
+  <div class="footer"><span id="statusMsg"></span><span class="spacer"></span><button class="btn btn-sm" id="clearBtn" style="color:var(--danger)"></button></div>
+</div>
+<script type="module">
+import { api, copyText, esc } from "./lib/api.js";
+import { icons } from "./lib/icons.js";
+const LEVEL_LABELS = { info: "信息", warning: "警告", error: "错误" };
+document.getElementById("logIcon").innerHTML = icons.log;
+document.getElementById("copyAllBtn").innerHTML = icons.copy + " 复制全部";
+document.getElementById("exportBtn").innerHTML = icons.download + " 导出";
+document.getElementById("clearBtn").innerHTML = icons.trash + " 清空日志";
+document.getElementById("copyAllBtn").onclick = async () => { const events = await api.getEvents(); copyText(events.slice().reverse().map(e => `[${formatTime(e.timestamp)}] [${LEVEL_LABELS[e.level]||e.level}] ${e.message}`).join("\n")); document.getElementById("statusMsg").textContent = "已复制"; };
+document.getElementById("exportBtn").onclick = async () => { const events = await api.getEvents(); const text = events.slice().reverse().map(e => `[${formatTime(e.timestamp)}] [${LEVEL_LABELS[e.level]||e.level}] ${e.message}`).join("\n"); const blob = new Blob([text], { type: "text/plain" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `meilink-logs-${Date.now()}.log`; a.click(); URL.revokeObjectURL(url); };
+document.getElementById("clearBtn").onclick = async () => { await api.clearEvents(); document.getElementById("statusMsg").textContent = "已清空"; refresh(); };
+function formatTime(ts) { return new Date(ts).toLocaleString("zh-CN", { hour12: false }); }
+async function refresh() {
+  try { const events = await api.getEvents(); document.getElementById("logCount").textContent = `${events.length} 条事件`;
+    const empty = document.getElementById("empty"), table = document.getElementById("logTable"), body = document.getElementById("logBody");
+    if (!events.length) { empty.style.display = "block"; table.style.display = "none"; }
+    else { empty.style.display = "none"; table.style.display = "table"; body.innerHTML = events.map(e => `<tr><td class="time">${formatTime(e.timestamp)}</td><td class="level ${e.level||"info"}">${LEVEL_LABELS[e.level]||"信息"}</td><td class="content">${esc(e.message)}</td></tr>`).join(""); }
+  } catch(e) { console.error(e); }
+}
+refresh(); setInterval(refresh, 3000);
+</script>
+</body>
+</html>

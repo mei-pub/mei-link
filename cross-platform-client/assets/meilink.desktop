@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Meilink
+Comment=frp 内网穿透管理客户端（Web UI）
+Comment[en]=frp tunnel client with web management UI
+Icon=meilink
+Exec=meilink-webui
+Terminal=false
+Categories=Network;Utility;
+StartupNotify=true

@@ -1,0 +1,181 @@
+/* Meilink desktop shared styles — aligned with macOS native light theme.
+ * The native Swift app uses system default colors: white window background,
+ * .primary (black) text, .secondary (gray) text, system button styles.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* System surfaces */
+  --bg: #ffffff;
+  --surface: #f2f2f5;
+  --surface-hover: #e8e8ec;
+  --border: #c7c7cc;
+
+  /* Text — 加深颜色确保可读性 */
+  --text: #1c1c1e;
+  --text-secondary: #636366;
+  --text-tertiary: #8e8e93;
+
+  /* Accents (matching SwiftUI system colors) */
+  --primary: #007aff;
+  --success: #34c759;
+  --warning: #ff9500;
+  --danger: #ff3b30;
+
+  --radius: 10px;
+  --radius-sm: 8px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  line-height: 1.4;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+/* Buttons — aligned with macOS system button look */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 400;
+  transition: background .12s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--surface-hover); }
+.btn:active { background: #dcdce0; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.btn-primary:hover { background: #0062c4; }
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.btn-danger:hover { background: #e0332a; }
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--primary);
+}
+.btn-ghost:hover { background: rgba(0,113,227,.08); }
+
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* Cards */
+.card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+/* Form elements */
+.form-group { margin-bottom: 12px; }
+.form-group label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.form-input {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color .12s;
+}
+.form-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,113,227,.12); }
+select.form-input { cursor: pointer; }
+
+/* Status indicators */
+.status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.running { background: var(--success); }
+.status-dot.connecting { background: var(--warning); }
+.status-dot.stopped { background: var(--text-tertiary); }
+
+/* Tunnel status badge */
+.t-status {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 500;
+}
+.t-status.running { color: var(--success); }
+.t-status.wait_start { color: var(--warning); }
+.t-status.start_error, .t-status.check_failed { color: var(--danger); }
+.t-status.new, .t-status.closed { color: var(--text-tertiary); }
+
+/* Toggle switch (aligned with macOS) */
+.toggle { position: relative; display: inline-block; width: 36px; height: 22px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle .slider {
+  position: absolute; cursor: pointer; inset: 0;
+  background: #e9e9ea; border-radius: 22px; transition: .2s;
+}
+.toggle .slider:before {
+  content: ""; position: absolute;
+  height: 18px; width: 18px; left: 2px; bottom: 2px;
+  background: #fff; border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  transition: .2s;
+}
+.toggle input:checked + .slider { background: var(--success); }
+.toggle input:checked + .slider:before { transform: translateX(14px); }
+
+/* Section cards (for settings) */
+.section-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.section-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+
+.empty-state { text-align: center; padding: 40px; color: var(--text-secondary); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.25); }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }

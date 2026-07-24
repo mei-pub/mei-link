@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="styles/app.css">
+<style>
+  html, body { background: transparent; margin: 0; padding: 0; width: 330px; height: 440px; overflow: hidden; }
+  .popover-shell { width: 330px; height: 440px; display: flex; flex-direction: column; align-items: stretch; }
+  .popover-arrow-row { height: 12px; width: 330px; position: relative; flex: 0 0 12px; }
+  .popover-arrow { position: absolute; left: calc(50% - 9px); top: 0; width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 12px solid rgba(255,255,255,0.9); filter: drop-shadow(0 1px 1px rgba(0,0,0,.08)); }
+  .popover { padding: 14px; display: flex; flex-direction: column; gap: 14px; height: 428px; background: rgba(255,255,255,0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 16px; box-shadow: 0 8px 26px rgba(0,0,0,.22); overflow: hidden; }
+  .status-card { padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.04); }
+  .status-header { display: flex; align-items: center; gap: 8px; }
+  .status-header .info { flex: 1; min-width: 0; }
+  .status-header .title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .status-header .subtitle { font-size: 10px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .play-btn { width: 28px; height: 28px; border-radius: 50%; border: none; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--primary); color: #fff; cursor: pointer; }
+  .play-btn.danger { background: var(--danger); }
+  .section-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-secondary); margin-bottom: 4px; }
+  .tunnel-list-wrap { min-height: 0; overflow: auto; }
+  .tunnel-row { background: rgba(0,0,0,0.04); border-radius: 10px; padding: 10px; margin-bottom: 6px; }
+  .tunnel-row .row1 { display: flex; align-items: center; gap: 4px; }
+  .tunnel-row .name { font-weight: 600; font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .tunnel-row .row2 { font-size: 10px; color: var(--text-secondary); margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tunnel-row .actions { display: flex; gap: 3px; }
+  .tunnel-row .actions .btn { flex: 1; padding: 2px 5px; font-size: 10px; justify-content: center; gap: 2px; }
+  .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: auto; }
+  .control-grid .btn { justify-content: center; font-size: 11px; padding: 6px; gap: 3px; border: 1px solid var(--border); }
+  .add-link { background: none; border: none; color: var(--primary); font-size: 10px; cursor: pointer; }
+  .t-status { font-size: 10px !important; }
+</style>
+</head>
+<body>
+<div class="popover-shell">
+  <div class="popover-arrow-row"><div class="popover-arrow"></div></div>
+  <div class="popover">
+    <div class="status-card">
+      <div class="status-header">
+        <span id="statusDot" class="status-dot stopped"></span>
+        <div class="info">
+          <div id="statusTitle" class="title">未连接</div>
+          <div id="statusSubtitle" class="subtitle">请先完成服务器配置</div>
+        </div>
+      <button id="playBtn" class="play-btn" title="连接" aria-label="连接"></button>
+      </div>
+    </div>
+    <div class="tunnel-list-wrap">
+      <div class="section-label"><span>隧道</span><span id="enabledCount">0 个启用</span></div>
+      <div id="tunnelList"></div>
+    </div>
+    <div class="control-grid">
+      <button class="btn" id="btnMain" aria-label="主窗口" title="主窗口"></button>
+      <button class="btn" id="btnLogs" aria-label="日志" title="日志"></button>
+      <button class="btn" id="btnSettings" aria-label="设置" title="设置"></button>
+      <button class="btn" id="btnRestart" aria-label="重启" title="重启"></button>
+      <button class="btn" id="btnQuit" aria-label="退出" title="退出" style="grid-column: span 2; color: var(--danger);"></button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { api, openWindow, quitApp, openUrl, copyText, closeWindow, overallStatus, routeText, canOpen, STATUS_LABELS, esc, tunnelStatus } from "./lib/api.js";
+import { icons } from "./lib/icons.js";
+
+document.getElementById("playBtn").innerHTML = icons.play;
+document.getElementById("playBtn").onclick = async () => { try { const s = await api.getStatus(); if (s.running) await api.stop(); else await api.start(); refresh(); } catch(e){} };
+document.getElementById("btnMain").innerHTML = icons.window + " 主窗口";
+document.getElementById("btnMain").onclick = () => { closeWindow(); openWindow("main"); };
+document.getElementById("btnLogs").innerHTML = icons.log + " 日志";
+document.getElementById("btnLogs").onclick = () => { closeWindow(); openWindow("logs"); };
+document.getElementById("btnSettings").innerHTML = icons.settings + " 设置";
+document.getElementById("btnSettings").onclick = async () => { closeWindow(); try { const s = await api.getStatus(); if (s.configured) openWindow("settings"); else openWindow("setup"); } catch(e){ openWindow("setup"); } };
+document.getElementById("btnRestart").innerHTML = icons.restart + " 重启";
+document.getElementById("btnRestart").onclick = async () => { try { await api.restart(); } catch(e){} refresh(); };
+document.getElementById("btnQuit").innerHTML = icons.power + " 退出";
+document.getElementById("btnQuit").onclick = () => quitApp();
+
+async function refresh() {
+  try {
+    const [status, config, tunnels] = await Promise.all([api.getStatus(), api.getServerConfig().catch(()=>null), api.getTunnels()]);
+    const ov = overallStatus(status);
+    document.getElementById("statusDot").className = "status-dot " + ov.dotClass;
+    document.getElementById("statusTitle").textContent = ov.text;
+    const sub = config ? `${config.serverAddr}:${config.serverPort} · ${config.subDomainHost||""}` : "请先完成服务器配置";
+    document.getElementById("statusSubtitle").textContent = sub;
+    const playBtn = document.getElementById("playBtn");
+    playBtn.innerHTML = status.running ? icons.stop : icons.play;
+    playBtn.setAttribute("aria-label", status.running ? "断开" : "连接");
+    playBtn.title = status.running ? "断开" : "连接";
+    playBtn.className = "play-btn" + (status.running ? " danger" : "");
+
+    const enabled = tunnels.filter(t => t.enabled);
+    document.getElementById("enabledCount").textContent = `${enabled.length} 个启用`;
+    const list = document.getElementById("tunnelList");
+    if (enabled.length === 0) {
+      list.innerHTML = `<div style="text-align:center;color:var(--text-secondary);font-size:11px;padding:8px">暂无启用隧道 <button class="add-link" id="addLink">添加</button></div>`;
+      const al = document.getElementById("addLink"); if (al) al.onclick = () => { closeWindow(); openWindow("main"); };
+    } else {
+      list.innerHTML = enabled.map(t => {
+        const st = tunnelStatus(t);
+        const route = routeText(t, config);
+        const dotClass = st==='running'?'running':(st==='closed'||st==='new'||st==='start_error'||st==='check_failed'?'stopped':'connecting');
+        return `<div class="tunnel-row"><div class="row1"><span class="status-dot ${dotClass}" style="width:6px;height:6px"></span><span class="name">${esc(t.name)}</span><span class="t-status ${st}">${STATUS_LABELS[st]||st}</span></div><div class="row2">${esc(route)}</div><div class="actions"><button class="btn btn-sm" data-copy="${esc(route)}">${icons.copy} 复制</button>${canOpen(t) ? `<button class="btn btn-sm" data-open="${esc(route)}">${icons.external} 打开</button>` : ""}</div></div>`;
+      }).join("");
+      list.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => copyText(b.dataset.copy));
+      list.querySelectorAll("[data-open]").forEach(b => b.onclick = () => openUrl(b.dataset.open));
+    }
+    if (!status.configured) { closeWindow(); openWindow("setup"); }
+  } catch(e) { console.error(e); }
+}
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

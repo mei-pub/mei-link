@@ -104,12 +104,15 @@ final class StatusBarController: NSObject {
     }
 
     private func menuBarImage(for status: MenuBarStatusItem) -> NSImage {
-        switch manager.appSettings.menuBarIconStyle {
-        case .appIcon:
-            return resizedApplicationIcon()
-        case .link, .text:
-            return makeLinkIcon(systemName: status.imageName)
+        // Load the custom PNG icon from bundle resources (5 styles shared with GUI version).
+        let name = status.imageName
+        if let path = Bundle.main.path(forResource: name, ofType: "png"),
+           let image = NSImage(contentsOfFile: path) {
+            image.size = NSSize(width: 18, height: 18)
+            image.isTemplate = true
+            return image
         }
+        return resizedApplicationIcon()
     }
 
     private func resizedApplicationIcon() -> NSImage {
@@ -335,7 +338,7 @@ final class AppWindowController {
         settingsWindow = showWindow(
             existing: settingsWindow,
             title: "设置",
-            size: NSSize(width: 760, height: 880)
+            size: NSSize(width: 760, height: 460)
         ) {
             SettingsView(manager: manager) { [weak self] in
                 self?.settingsWindow?.close()
@@ -357,7 +360,7 @@ final class AppWindowController {
         tunnelWindow = showWindow(
             existing: tunnelWindow,
             title: tunnel == nil ? "添加新隧道" : "编辑隧道",
-            size: NSSize(width: 660, height: 840)
+            size: NSSize(width: 660, height: 440)
         ) {
             TunnelEditView(manager: manager, tunnel: tunnel) { [weak self] in
                 self?.tunnelWindow?.close()

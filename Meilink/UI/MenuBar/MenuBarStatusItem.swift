@@ -6,10 +6,7 @@ struct MenuBarStatusItem {
     let style: MenuBarIconStyle
 
     var imageName: String {
-        if style == .appIcon { return "app" }
-        if isConnected { return "link" }
-        if isFrpcRunning { return "link.badge.plus" }
-        return "link"
+        style.imageName
     }
 
     var iconColor: Color {

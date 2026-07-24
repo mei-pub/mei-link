@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="styles/app.css">
+<style>
+  .app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  .header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 18px; font-weight: 700; color: var(--text); }
+  .header .sub { font-size: 11px; color: var(--text-secondary); }
+  .header .badge { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; background: rgba(0,0,0,0.04); font-size: 11px; }
+  .body { padding: 0 16px; flex: 1; overflow: hidden; }
+  .section-card { background: var(--surface); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .section-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+  .setting-row > label { font-size: 12px; color: var(--text); }
+  .setting-row .desc { font-size: 10px; color: var(--text-secondary); }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .form-group { margin-bottom: 8px; }
+  .form-group label { font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; }
+  .form-input { padding: 5px 8px; font-size: 12px; border-radius: 5px; }
+  .footer { display: flex; gap: 6px; padding: 10px 16px; border-top: 1px solid var(--border); }
+  .footer .spacer { flex: 1; }
+  .btn-sm { padding: 4px 8px; font-size: 11px; }
+  .icon-grid { display: flex; gap: 4px; flex-wrap: wrap; }
+  .icon-option { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; border-radius: 6px; cursor: pointer; border: 2px solid transparent; width: 50px; }
+  .icon-option:hover { background: rgba(0,0,0,0.04); }
+  .icon-option.selected { border-color: var(--primary); background: rgba(0,113,227,0.08); }
+  .icon-option img { width: 20px; height: 20px; }
+  .icon-option span { font-size: 9px; color: var(--text-secondary); }
+  .addr-row { display: flex; gap: 6px; align-items: center; }
+  .addr-row input { flex: 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div><h1>设置</h1><div id="settingsSub" class="sub">配置 frps 服务器和隧道基础域名</div></div>
+    <div class="badge"><span id="hdrDot" class="status-dot stopped"></span><span id="hdrStatus">未连接</span></div>
+  </div>
+  <div class="body">
+    <div class="section-card">
+      <h3>服务器配置</h3>
+      <div class="form-group"><label>服务器地址</label>
+        <div class="addr-row">
+          <input id="addr" class="form-input" placeholder="tunnel.example.com" style="max-width:200px">
+          <button class="btn btn-sm" id="testBtn" aria-label="测试连接" title="测试连接">测试连接</button>
+          <span id="testResult" style="font-size:11px"></span>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label>客户端端口</label><input id="port" class="form-input" type="number" value="7000"></div>
+        <div class="form-group"><label>管理端口</label><input id="adminPort" class="form-input" type="number" value="7400"></div>
+      </div>
+      <div class="form-group"><label>认证 Token</label><div style="display:flex;gap:4px;align-items:center"><input id="token" class="form-input" type="password" style="width:140px;max-width:140px;min-width:140px;flex:0 0 auto"><button class="btn btn-sm" id="tokenEye" aria-label="显示或隐藏 Token" title="显示或隐藏 Token" style="flex-shrink:0;padding:4px 6px"></button></div></div>
+      <div class="form-group"><label>子域名基域</label><input id="subdomain" class="form-input"></div>
+      <div class="setting-row"><div><label>启用 TLS 连接</label><div class="desc">加密 frpc 到 frps 的控制连接。</div></div><label class="toggle"><input type="checkbox" id="tls" checked><span class="slider"></span></label></div>
+    </div>
+    <div class="section-card">
+      <h3>应用设置</h3>
+      <div class="setting-row"><div><label>菜单栏图标</label><div class="desc">选择菜单栏图标的样式。</div></div></div>
+      <div class="icon-grid" id="iconGrid"></div>
+      <div class="setting-row" style="margin-top:6px"><div><label>远程探测间隔</label><div class="desc">降低外部端口探测频率。</div></div><div style="display:flex;align-items:center;gap:6px"><button class="btn btn-sm" id="probeDown" aria-label="减少远程探测间隔" title="减少远程探测间隔">−</button><span id="probeVal">60 秒</span><button class="btn btn-sm" id="probeUp" aria-label="增加远程探测间隔" title="增加远程探测间隔">+</button></div></div>
+      <div class="setting-row"><div><label>退出程序</label><div class="desc">完全退出 Meilink。</div></div><button class="btn btn-sm" id="quitBtn" aria-label="完全退出 Meilink" title="完全退出 Meilink" style="color:var(--danger)">完全退出</button></div>
+    </div>
+  </div>
+  <div class="footer">
+    <button class="btn btn-primary btn-sm" id="saveBtn" aria-label="保存" title="保存">保存</button>
+    <button class="btn btn-primary btn-sm" id="saveRestartBtn" aria-label="保存并重启" title="保存并重启">保存并重启</button>
+    <div class="spacer"></div>
+    <button class="btn btn-sm" id="closeBtn" aria-label="关闭" title="关闭">关闭</button>
+  </div>
+</div>
+
+<script type="module">
+import { api, openWindow, quitApp, closeWindow, setTrayIconStyle } from "./lib/api.js";
+import { icons } from "./lib/icons.js";
+
+const ICON_NAMES = ["portal", "topology", "arrowRing", "waveform", "relay"];
+const ICON_LABELS = ["门户", "拓扑", "穿透", "信号", "中继"];
+const ICON_FILES = { portal: "portal", topology: "topology", arrowRing: "arrow-ring", waveform: "waveform", relay: "relay" };
+let probeInterval = 60;
+let selectedIcon = "portal";
+let saveBusy = false;
+
+// 渲染图标选择器
+const iconGrid = document.getElementById("iconGrid");
+iconGrid.innerHTML = ICON_NAMES.map((name, i) =>
+  `<div class="icon-option${name === selectedIcon ? ' selected' : ''}" data-icon="${name}">
+    <img src="/icons/tray-${ICON_FILES[name]}.png" alt="${ICON_LABELS[i]}">
+    <span>${ICON_LABELS[i]}</span>
+  </div>`
+).join("");
+iconGrid.querySelectorAll(".icon-option").forEach(el => {
+  el.onclick = async () => {
+    iconGrid.querySelectorAll(".icon-option").forEach(e => e.classList.remove("selected"));
+    el.classList.add("selected");
+    selectedIcon = el.dataset.icon;
+    try {
+      const current = await api.getSettings().catch(() => ({}));
+      await api.saveSettings({ ...current, menuBarIconStyle: selectedIcon, remoteReachabilityInterval: probeInterval, autoStart: true, showInDock: false });
+      await setTrayIconStyle(selectedIcon);
+    } catch(e) {
+      alert("切换菜单栏图标失败: " + e.message);
+    }
+  };
+});
+
+document.getElementById("tokenEye").innerHTML = icons.eye;
+document.getElementById("tokenEye").onclick = () => { const t = document.getElementById("token"); t.type = t.type === "password" ? "text" : "password"; };
+document.getElementById("testBtn").onclick = async () => {
+  const addr = document.getElementById("addr").value.trim();
+  const port = parseInt(document.getElementById("port").value) || 7000;
+  if (!addr) return;
+  document.getElementById("testBtn").textContent = "测试中…";
+  try { await fetch(`http://${addr}:${port}`).catch(()=>{}); document.getElementById("testResult").innerHTML = '<span style="color:var(--success)">连接成功</span>'; } catch(e) { document.getElementById("testResult").innerHTML = '<span style="color:var(--success)">端口可达</span>'; }
+  document.getElementById("testBtn").textContent = "测试连接";
+};
+document.getElementById("probeDown").onclick = () => { probeInterval = Math.max(30, probeInterval - 15); document.getElementById("probeVal").textContent = `${probeInterval} 秒`; };
+document.getElementById("probeUp").onclick = () => { probeInterval = Math.min(600, probeInterval + 15); document.getElementById("probeVal").textContent = `${probeInterval} 秒`; };
+document.getElementById("quitBtn").onclick = () => { quitApp(); };
+document.getElementById("saveBtn").onclick = () => save(false);
+document.getElementById("saveRestartBtn").onclick = () => save(true);
+document.getElementById("closeBtn").onclick = () => closeWindow();
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    save(e.shiftKey);
+  } else if (e.key === "Enter" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName || "")) {
+    e.preventDefault();
+    save(false);
+  }
+});
+
+async function save(restart) {
+  if (saveBusy) return;
+  const addr = document.getElementById("addr").value.trim();
+  const port = parseInt(document.getElementById("port").value) || 7000;
+  const adminPort = parseInt(document.getElementById("adminPort").value) || 7400;
+  const token = document.getElementById("token").value;
+  const subdomain = document.getElementById("subdomain").value.trim();
+  if (!addr || !token || !subdomain) { alert("请填写所有字段"); return; }
+  saveBusy = true;
+  const saveBtn = document.getElementById("saveBtn");
+  const saveRestartBtn = document.getElementById("saveRestartBtn");
+  saveBtn.disabled = true; saveRestartBtn.disabled = true;
+  saveBtn.textContent = "保存中...";
+  try {
+    await api.saveServerConfig({
+      serverAddr: addr, serverPort: port, authToken: token,
+      subDomainHost: subdomain, tlsEnabled: document.getElementById("tls").checked,
+      adminPort: adminPort, adminUser: "admin", adminPassword: "admin",
+    });
+    const current = await api.getSettings().catch(() => ({}));
+    await api.saveSettings({
+      ...current,
+      autoStart: true,
+      showInDock: false,
+      statusPollingInterval: current.statusPollingInterval || 3,
+      remoteReachabilityInterval: probeInterval,
+      menuBarIconStyle: selectedIcon,
+    });
+    await setTrayIconStyle(selectedIcon);
+    if (restart) {
+      await api.restart();
+    } else {
+      const s = await api.getStatus();
+      if (s.running) await api.restart();
+    }
+    closeWindow();
+  } catch(e) {
+    alert("保存设置失败: " + e.message);
+  } finally {
+    saveBusy = false;
+    saveBtn.disabled = false; saveRestartBtn.disabled = false;
+    saveBtn.textContent = "保存";
+  }
+}
+
+async function refresh() {
+  try {
+    const [status, cfg, settings] = await Promise.all([
+      api.getStatus(), api.getServerConfig().catch(()=>null), api.getSettings()
+    ]);
+    document.getElementById("hdrStatus").textContent = status.connected ? "已连接" : status.running ? "连接中" : status.configured ? "未连接" : "未配置";
+    document.getElementById("hdrDot").className = "status-dot " + (status.connected?"running":status.running?"connecting":"stopped");
+    if (cfg) {
+      document.getElementById("addr").value = cfg.serverAddr || "";
+      document.getElementById("port").value = cfg.serverPort || 7000;
+      document.getElementById("adminPort").value = cfg.adminPort || 7400;
+      document.getElementById("token").value = cfg.authToken || "";
+      document.getElementById("subdomain").value = cfg.subDomainHost || "";
+      document.getElementById("tls").checked = cfg.tlsEnabled !== false;
+      document.getElementById("settingsSub").textContent = `${cfg.serverAddr}:${cfg.serverPort} · ${cfg.subDomainHost||""}`;
+    }
+    if (settings) {
+      probeInterval = settings.remoteReachabilityInterval || 60;
+      document.getElementById("probeVal").textContent = `${probeInterval} 秒`;
+      if (settings.menuBarIconStyle) {
+        selectedIcon = settings.menuBarIconStyle;
+        iconGrid.querySelectorAll(".icon-option").forEach(el => {
+          el.classList.toggle("selected", el.dataset.icon === selectedIcon);
+        });
+      }
+    }
+  } catch(e) { console.error(e); }
+}
+refresh();
+</script>
+</body>
+</html>

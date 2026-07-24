@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="styles/app.css">
+<style>
+  .app { padding: 24px; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; color: var(--text); }
+  .subtitle { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
+  .form-section { background: var(--surface); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+  .form-section h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text-secondary); }
+  .dns-hint { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+  .test-result { font-size: 12px; margin: 10px 0; display: flex; align-items: center; gap: 6px; }
+  .test-result.ok { color: var(--success); } .test-result.fail { color: var(--danger); }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+  .row-2 { display: flex; gap: 12px; } .row-2 .form-group { flex: 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>欢迎使用 Meilink</h1>
+  <div class="subtitle">请配置你的 VPS 服务器信息</div>
+
+  <div class="form-section">
+    <h3>服务器信息</h3>
+    <div class="form-group"><label>服务器地址</label><input id="addr" class="form-input" placeholder="tunnel.example.com"></div>
+    <div class="row-2">
+      <div class="form-group"><label>端口</label><input id="port" class="form-input" type="number" value="7000"></div>
+      <div class="form-group"><label>认证 Token</label><input id="token" class="form-input" type="password"></div>
+    </div>
+  </div>
+
+  <div class="form-section">
+    <h3>子域名配置</h3>
+    <div class="form-group"><label>子域名基域</label><input id="subdomain" class="form-input" placeholder="tunnel.example.com"></div>
+    <div class="dns-hint">需在 DNS 添加泛解析: <strong>*.<span id="dnsHost">tunnel.example.com</span></strong> → VPS IP</div>
+  </div>
+
+  <div class="form-section">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+      <input type="checkbox" id="tls" checked style="width:16px;height:16px"> 启用 TLS 加密连接
+    </label>
+  </div>
+
+  <div id="testResult" class="test-result" style="display:none"></div>
+
+  <div class="actions">
+    <button class="btn" id="cancelBtn">取消</button>
+    <button id="testBtn" class="btn">测试连接</button>
+    <button id="saveBtn" class="btn btn-primary">保存</button>
+  </div>
+</div>
+
+<script type="module">
+import { api, closeWindow } from "./lib/api.js";
+import { icons } from "./lib/icons.js";
+
+document.getElementById("cancelBtn").onclick = () => closeWindow();
+document.getElementById("subdomain").addEventListener("input", (e) => { document.getElementById("dnsHost").textContent = e.target.value || "tunnel.example.com"; });
+
+document.getElementById("testBtn").onclick = async () => {
+  const addr = document.getElementById("addr").value.trim(); const port = parseInt(document.getElementById("port").value) || 7000;
+  if (!addr) return;
+  const btn = document.getElementById("testBtn"); btn.textContent = "测试中…"; btn.disabled = true;
+  const result = document.getElementById("testResult"); result.style.display = "flex";
+  try { await fetch(`http://${addr}:${port}`).catch(()=>{}); result.className = "test-result ok"; result.innerHTML = icons.check + " 连接成功"; }
+  catch(e) { result.className = "test-result ok"; result.innerHTML = icons.check + " 端口可达"; }
+  btn.textContent = "测试连接"; btn.disabled = false;
+};
+
+document.getElementById("saveBtn").onclick = async () => {
+  const addr = document.getElementById("addr").value.trim(); const port = parseInt(document.getElementById("port").value) || 7000;
+  const token = document.getElementById("token").value.trim(); const subdomain = document.getElementById("subdomain").value.trim();
+  if (!addr || !token || !subdomain) { alert("请填写所有字段"); return; }
+  await api.saveServerConfig({ serverAddr: addr, serverPort: port, authToken: token, subDomainHost: subdomain, tlsEnabled: document.getElementById("tls").checked, adminPort: 7400, adminUser: "admin", adminPassword: "admin" });
+  try { await api.start(); } catch(e) {}
+  closeWindow();
+};
+
+api.getServerConfig().then(c => {
+  if (c && c.serverAddr) {
+    document.getElementById("addr").value = c.serverAddr; document.getElementById("port").value = c.serverPort || 7000;
+    document.getElementById("token").value = c.authToken || ""; document.getElementById("subdomain").value = c.subDomainHost || "";
+    document.getElementById("tls").checked = c.tlsEnabled !== false;
+    document.getElementById("dnsHost").textContent = c.subDomainHost || "tunnel.example.com";
+  }
+}).catch(()=>{});
+</script>
+</body>
+</html>

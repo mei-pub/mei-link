@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="styles/app.css">
+<style>
+  .app { display: flex; flex-direction: column; height: 100vh; }
+  .header { padding: 20px 24px; }
+  .header h1 { font-size: 18px; font-weight: 700; color: var(--text); }
+  .header .hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+  .form-body { flex: 1; overflow-y: auto; padding: 0 24px; }
+  .type-segments { display: flex; gap: 0; margin-bottom: 4px; }
+  .type-segments button { flex: 1; padding: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text-secondary); font-size: 13px; cursor: pointer; }
+  .type-segments button:first-child { border-radius: 8px 0 0 8px; }
+  .type-segments button:last-child { border-radius: 0 8px 8px 0; }
+  .type-segments button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .footer { display: flex; justify-content: space-between; padding: 14px 24px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1 id="formTitle">添加新隧道</h1>
+    <div id="formHint" class="hint">通过子域名发布本机 HTTP 服务</div>
+  </div>
+  <div class="form-body">
+    <div class="form-section">
+      <h3>基本信息</h3>
+      <div class="form-group"><label>隧道名称</label><input id="name" class="form-input" placeholder="例如 admin"></div>
+      <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:6px">类型</label>
+      <div class="type-segments">
+        <button data-type="tcp">TCP</button><button data-type="udp">UDP</button><button data-type="http">HTTP</button><button data-type="https">HTTPS</button>
+      </div>
+    </div>
+    <div class="form-section">
+      <h3>本地配置</h3>
+      <div class="form-group"><label>本地端口</label><input id="localPort" class="form-input" type="number" placeholder="8080" style="max-width:160px"></div>
+      <div class="form-group"><label>本地地址</label><input id="localIP" class="form-input" value="127.0.0.1"></div>
+    </div>
+    <div class="form-section">
+      <h3>远程配置</h3>
+      <div id="subdomainGroup" class="form-group"><label>子域名</label><input id="subdomain" class="form-input" placeholder="例如 admin"></div>
+      <div id="remotePortGroup" class="form-group" style="display:none"><label>远程端口</label><input id="remotePort" class="form-input" type="number" placeholder="留空自动分配"></div>
+    </div>
+    <div class="form-section">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="checkbox" id="enabled" checked style="width:16px;height:16px"> 启用隧道</label>
+    </div>
+  </div>
+  <div class="footer">
+    <button class="btn" id="cancelBtn" aria-label="取消" title="取消">取消</button>
+    <button id="saveBtn" class="btn btn-primary" aria-label="创建" title="创建">创建</button>
+  </div>
+</div>
+
+<script type="module">
+import { api, closeWindow } from "./lib/api.js";
+let selectedType = "http"; let editId = null;
+document.getElementById("cancelBtn").onclick = () => closeWindow();
+function selectType(type) {
+  selectedType = type;
+  document.querySelectorAll(".type-segments button").forEach(b => b.classList.toggle("active", b.dataset.type === type));
+  const isHttp = type === "http" || type === "https";
+  document.getElementById("subdomainGroup").style.display = isHttp ? "block" : "none";
+  document.getElementById("remotePortGroup").style.display = isHttp ? "none" : "block";
+  document.getElementById("formHint").textContent = isHttp ? "通过子域名发布本机 HTTP 服务" : "通过远程端口转发本机 TCP/UDP 服务";
+}
+document.querySelectorAll(".type-segments button").forEach(b => b.onclick = () => selectType(b.dataset.type));
+selectType("http");
+document.getElementById("saveBtn").onclick = async () => {
+  const name = document.getElementById("name").value.trim(); const localPort = parseInt(document.getElementById("localPort").value);
+  if (!name || !localPort) { alert("请填写名称和本地端口"); return; }
+  const tunnel = { name, type: selectedType, localIP: document.getElementById("localIP").value || "127.0.0.1", localPort, remotePort: parseInt(document.getElementById("remotePort").value) || 0, subdomain: document.getElementById("subdomain").value.trim(), enabled: document.getElementById("enabled").checked };
+  try { if (editId) { tunnel.id = editId; await api.updateTunnel(tunnel); } else { await api.addTunnel(tunnel); } closeWindow(); } catch(e) { alert("保存失败: " + e.message); }
+};
+const editTunnelId = sessionStorage.getItem("editTunnelId");
+if (editTunnelId) { sessionStorage.removeItem("editTunnelId"); editId = editTunnelId; document.getElementById("formTitle").textContent = "编辑隧道"; document.getElementById("saveBtn").textContent = "保存"; document.getElementById("saveBtn").setAttribute("aria-label", "保存"); document.getElementById("saveBtn").title = "保存";
+  api.getTunnels().then(tunnels => { const t = tunnels.find(x => x.id === editId); if (!t) return; document.getElementById("name").value = t.name; document.getElementById("localPort").value = t.localPort; document.getElementById("localIP").value = t.localIP || "127.0.0.1"; document.getElementById("remotePort").value = t.remotePort || ""; document.getElementById("subdomain").value = t.subdomain || ""; document.getElementById("enabled").checked = t.enabled; selectType(t.type); });
+}
+</script>
+</body>
+</html>

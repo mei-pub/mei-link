@@ -41,7 +41,7 @@ final class MeilinkAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        runtime.manager.stopImmediately()
+        runtime.manager.killFrpcOnExit()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

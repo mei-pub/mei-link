@@ -1,0 +1,25 @@
+#!/bin/bash
+# meilink-webui: 启动 Meilink 客户端（若未运行）并打开 Web 管理界面。
+# 供桌面环境的 .desktop 启动器调用。
+set -e
+
+MEILINK_BIN="${MEILINK_BIN:-$(command -v meilink || echo "$HOME/.local/bin/meilink")}"
+PORT="${MEILINK_PORT:-7400}"
+URL="http://localhost:${PORT}"
+
+# 若未运行，则在后台启动
+if ! "$MEILINK_BIN" status 2>/dev/null | grep -q "running: true"; then
+    nohup "$MEILINK_BIN" start >/dev/null 2>&1 &
+    # 等待 Web UI 就绪（最多 15 秒）
+    for i in $(seq 1 30); do
+        if curl -sf "$URL/api/status" >/dev/null 2>&1; then break; fi
+        sleep 0.5
+    done
+fi
+
+# 打开浏览器
+if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$URL"
+elif command -v open >/dev/null 2>&1; then
+    open "$URL"
+fi

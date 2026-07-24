@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{.title}}</title>
+<style>
+:root{--bg:#0f172a;--surface:#1e293b;--border:#334155;--text:#f1f5f9;--text-secondary:#94a3b8;--primary:#3b82f6;--success:#22c55e;--warning:#eab308;--danger:#ef4444;--radius:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.container{max-width:960px;margin:0 auto;padding:24px}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--border);margin-bottom:24px;flex-wrap:wrap;gap:12px}
+header h1{font-size:24px;font-weight:700}
+.header-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.status-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:500}
+.status-badge.connected{background:rgba(34,197,94,.15);color:var(--success)}
+.status-badge.connecting{background:rgba(234,179,8,.15);color:var(--warning)}
+.status-badge.stopped{background:rgba(239,68,68,.15);color:var(--danger)}
+.status-dot{width:8px;height:8px;border-radius:50%}
+.connected .status-dot{background:var(--success)}
+.connecting .status-dot{background:var(--warning);animation:pulse 1.2s infinite}
+.stopped .status-dot{background:var(--danger)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
+.card-header h2{font-size:16px;font-weight:600}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:none;font-size:14px;font-weight:500;cursor:pointer;transition:background .15s;font-family:inherit}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:#2563eb}
+.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover{background:#dc2626}
+.btn-success{background:var(--success);color:#fff}.btn-success:hover{background:#16a34a}
+.btn-sm{padding:6px 12px;font-size:13px}
+.btn-ghost{background:transparent;color:var(--text-secondary);border:1px solid var(--border)}.btn-ghost:hover{background:var(--border)}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:13px;color:var(--text-secondary);margin-bottom:4px}
+.form-input{width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;outline:none;font-family:inherit}
+.form-input:focus{border-color:var(--primary)}
+select.form-input{cursor:pointer}
+.tunnel-list{list-style:none}
+.tunnel-item{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--bg);gap:12px;flex-wrap:wrap}
+.tunnel-info{flex:1;min-width:200px}
+.tunnel-name{font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px}
+.tunnel-detail{font-size:12px;color:var(--text-secondary);margin-top:4px}
+.type-badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:var(--border);color:var(--text)}
+.t-status{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600}
+.t-status.running{background:rgba(34,197,94,.2);color:var(--success)}
+.t-status.wait_start,.t-status.new{background:rgba(234,179,8,.2);color:var(--warning)}
+.t-status.start_error,.t-status.check_failed,.t-status.closed{background:rgba(239,68,68,.2);color:var(--danger)}
+.tunnel-actions{display:flex;align-items:center;gap:8px}
+.toggle{position:relative;width:38px;height:22px}
+.toggle input{opacity:0;width:0;height:0}
+.toggle .slider{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:22px;transition:.2s}
+.toggle .slider:before{content:"";position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle input:checked+.slider{background:var(--success)}
+.toggle input:checked+.slider:before{transform:translateX(16px)}
+.empty-state{text-align:center;padding:40px;color:var(--text-secondary)}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100}
+.modal-overlay.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:520px;max-width:90vw;max-height:90vh;overflow:auto}
+.modal h3{margin-bottom:16px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.event-list{max-height:240px;overflow-y:auto;font-family:"SF Mono",Menlo,monospace;font-size:12px}
+.event-item{padding:6px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:flex-start}
+.event-time{color:var(--text-secondary);min-width:70px}
+.event-info{color:var(--text)}.event-warning{color:var(--warning)}.event-error{color:var(--danger)}
+@media(max-width:640px){.grid-2{grid-template-columns:1fr}.tunnel-item{flex-direction:column;align-items:flex-start}}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+<h1>{{.title}}</h1>
+<div class="header-right">
+<div id="globalStatus" class="status-badge stopped"><span class="status-dot"></span><span id="statusText">未运行</span></div>
+<button class="btn btn-success btn-sm" id="ctrlStart" onclick="control('start')">启动</button>
+<button class="btn btn-ghost btn-sm" id="ctrlRestart" onclick="control('restart')">重启</button>
+<button class="btn btn-danger btn-sm" id="ctrlStop" onclick="control('stop')">停止</button>
+</div>
+</header>
+
+<div class="card">
+<div class="card-header"><h2>服务器配置</h2><button class="btn btn-ghost btn-sm" onclick="showConfigModal()">编辑</button></div>
+<div id="serverConfigPreview" class="grid-2"><div class="empty-state">尚未配置服务器</div></div>
+</div>
+
+<div class="card">
+<div class="card-header"><h2>隧道列表</h2><button class="btn btn-primary btn-sm" onclick="showTunnelModal()">+ 添加隧道</button></div>
+<ul id="tunnelList" class="tunnel-list"><li class="empty-state">暂无隧道</li></ul>
+</div>
+
+<div class="card">
+<div class="card-header"><h2>事件日志</h2><button class="btn btn-ghost btn-sm" onclick="clearEvents()">清空</button></div>
+<div id="eventList" class="event-list"><div class="empty-state">暂无事件</div></div>
+</div>
+
+<div class="card">
+<div class="card-header"><h2>设置</h2></div>
+<div class="grid-2">
+<div class="form-group"><label>状态轮询间隔（秒，3-30）</label><input class="form-input" id="setPoll" type="number" step="1" min="3" max="30"></div>
+<div class="form-group"><label>远程探活间隔（秒，30-600）</label><input class="form-input" id="setProbe" type="number" step="10" min="30" max="600"></div>
+</div>
+<div style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="saveSettings()">保存设置</button></div>
+</div>
+</div>
+
+<!-- Tunnel modal -->
+<div id="tunnelModal" class="modal-overlay">
+<div class="modal">
+<h3 id="tunnelModalTitle">添加隧道</h3>
+<input type="hidden" id="editId">
+<div class="form-group"><label>隧道名称</label><input class="form-input" id="tunnelName" placeholder="my-web"></div>
+<div class="form-group"><label>类型</label><select class="form-input" id="tunnelType" onchange="onTypeChange()"><option value="tcp">TCP</option><option value="udp">UDP</option><option value="http">HTTP</option><option value="https">HTTPS</option></select></div>
+<div class="grid-2">
+<div class="form-group"><label>本地 IP</label><input class="form-input" id="tunnelLocalIP" value="127.0.0.1"></div>
+<div class="form-group"><label>本地端口</label><input class="form-input" id="tunnelLocalPort" type="number" placeholder="8080"></div>
+</div>
+<div class="form-group" id="remotePortGroup"><label>远程端口（仅 TCP/UDP）</label><input class="form-input" id="tunnelRemotePort" type="number"></div>
+<div class="form-group" id="subdomainGroup"><label>子域名</label><input class="form-input" id="tunnelSubdomain" placeholder="my-app"></div>
+<div class="form-group"><label>自定义域名（逗号分隔，可留空）</label><input class="form-input" id="tunnelCustomDomains" placeholder="a.com,b.com"></div>
+<div class="grid-2" id="httpAuthGroup">
+<div class="form-group"><label>HTTP 用户（仅 HTTP，可留空）</label><input class="form-input" id="tunnelHttpUser"></div>
+<div class="form-group"><label>HTTP 密码（仅 HTTP，可留空）</label><input class="form-input" id="tunnelHttpPassword"></div>
+</div>
+<div class="form-group"><label>Host Header Rewrite（可留空）</label><input class="form-input" id="tunnelHostRewrite" placeholder="backend.local"></div>
+<div class="modal-actions"><button class="btn btn-ghost" onclick="closeTunnelModal()">取消</button><button class="btn btn-primary" onclick="saveTunnel()">保存</button></div>
+</div>
+</div>
+
+<!-- Config modal -->
+<div id="configModal" class="modal-overlay">
+<div class="modal">
+<h3>服务器配置</h3>
+<div class="form-group"><label>服务器地址</label><input class="form-input" id="cfgAddr" placeholder="your-vps.com"></div>
+<div class="grid-2">
+<div class="form-group"><label>客户端端口</label><input class="form-input" id="cfgPort" type="number" value="7000"></div>
+<div class="form-group"><label>Admin API 端口</label><input class="form-input" id="cfgAdminPort" type="number" value="7400"></div>
+</div>
+<div class="form-group"><label>认证 Token</label><input class="form-input" id="cfgToken" type="password"></div>
+<div class="form-group"><label>子域名基域</label><input class="form-input" id="cfgSubDomain" placeholder="tunnel.yourdomain.com"></div>
+<div class="form-group"><label>Admin 用户</label><input class="form-input" id="cfgAdminUser" value="admin"></div>
+<div class="form-group"><label>Admin 密码</label><input class="form-input" id="cfgAdminPassword" value="admin"></div>
+<div class="form-group"><label><input type="checkbox" id="cfgTLS" checked> 启用 TLS</label></div>
+<div class="modal-actions"><button class="btn btn-ghost" onclick="closeConfigModal()">取消</button><button class="btn btn-primary" onclick="saveConfig()">保存</button></div>
+</div>
+</div>
+
+<script>
+const STATUS_LABEL={new:"新建",wait_start:"连接中",start_error:"启动失败",running:"运行中",check_failed:"检查失败",closed:"已关闭",waitStart:"连接中"};
+async function api(path,opts={}){const res=await fetch(path,{headers:{"Content-Type":"application/json"},...opts,body:opts.body?JSON.stringify(opts.body):undefined});if(!res.ok){const t=await res.text();throw new Error(t||res.statusText)}if(res.status===204)return null;const ct=res.headers.get("content-type")||"";return ct.includes("json")?res.json():null}
+
+async function loadStatus(){try{const d=await api("/api/status");const b=document.getElementById("globalStatus");const t=document.getElementById("statusText");
+if(!d.configured){b.className="status-badge stopped";t.textContent="未配置"}
+else if(d.connected){b.className="status-badge connected";t.textContent="已连接"}
+else if(d.running){b.className="status-badge connecting";t.textContent="连接中"}
+else{b.className="status-badge stopped";t.textContent="未运行"}
+document.getElementById("ctrlStart").disabled=d.running;
+document.getElementById("ctrlStop").disabled=!d.running;
+document.getElementById("ctrlRestart").disabled=!d.running;
+}catch{}}
+
+async function loadServerConfig(){try{const c=await api("/api/server-config");
+document.getElementById("serverConfigPreview").innerHTML=`<div><strong>服务器:</strong> ${esc(c.server_addr||"-")}:${c.server_port||"-"}</div><div><strong>子域名基域:</strong> ${esc(c.sub_domain_host||"-")}</div><div><strong>TLS:</strong> ${c.tls_enabled?"是":"否"}</div><div><strong>Admin:</strong> ${esc(c.admin_user||"admin")} @ ${c.admin_port||7400}</div>`;
+}catch{document.getElementById("serverConfigPreview").innerHTML='<div class="empty-state">尚未配置服务器</div>'}}
+
+async function loadTunnels(){const ts=await api("/api/tunnels");const l=document.getElementById("tunnelList");
+if(!ts.length){l.innerHTML='<li class="empty-state">暂无隧道</li>';return}
+l.innerHTML=ts.map(t=>{
+const st=t.runtime_status||"new";const label=STATUS_LABEL[st]||st;
+const detail=`${(t.type||"").toUpperCase()} · ${esc(t.local_ip||"")}:${t.local_port}${t.remote_port?" → :"+t.remote_port:""}${t.subdomain?" · "+esc(t.subdomain):""}${t.custom_domains&&t.custom_domains.length?" · "+esc(t.custom_domains.join(",")):""}`;
+const remote=t.remote_addr?`<br>远程: ${esc(t.remote_addr)}`:"";
+const err=t.error_message?`<br><span style="color:var(--danger)">${esc(t.error_message)}</span>`:"";
+return `<li class="tunnel-item">
+<div class="tunnel-info"><div class="tunnel-name"><span class="type-badge">${(t.type||"").toUpperCase()}</span> ${esc(t.name)} <span class="t-status ${st}">${label}</span></div>
+<div class="tunnel-detail">${detail}${remote}${err}</div></div>
+<div class="tunnel-actions">
+<label class="toggle"><input type="checkbox" ${t.enabled?"checked":""} onchange="toggleTunnel('${t.id}',this.checked)"><span class="slider"></span></label>
+<button class="btn btn-ghost btn-sm" onclick="editTunnel('${t.id}')">编辑</button>
+<button class="btn btn-danger btn-sm" onclick="deleteTunnel('${t.id}')">删除</button></div></li>`}).join("")}
+
+async function loadEvents(){try{const ev=await api("/api/events");const el=document.getElementById("eventList");
+if(!ev.length){el.innerHTML='<div class="empty-state">暂无事件</div>';return}
+el.innerHTML=ev.map(e=>{const tm=new Date(e.timestamp).toLocaleTimeString();
+return `<div class="event-item"><span class="event-time">${tm}</span><span class="event-${e.level||"info"}">${esc(e.message)}</span></div>`}).join("")}catch{}}
+
+async function loadSettings(){try{const s=await api("/api/settings");document.getElementById("setPoll").value=s.status_polling_interval||3;document.getElementById("setProbe").value=s.remote_reachability_interval||60}catch{}}
+
+async function saveSettings(){const s={auto_start:true,status_polling_interval:parseFloat(document.getElementById("setPoll").value),remote_reachability_interval:parseFloat(document.getElementById("setProbe").value)};try{await api("/api/settings",{method:"POST",body:s});alert("设置已保存")}catch(e){alert("保存失败: "+e.message)}}
+
+async function control(act){try{await api("/api/control/"+act,{method:"POST"});loadStatus()}catch(e){alert("操作失败: "+e.message)}}
+
+async function toggleTunnel(id,enabled){try{await api("/api/tunnels/"+id+"/toggle",{method:"POST",body:{enabled}});loadTunnels();loadStatus()}catch(e){alert("操作失败: "+e.message);loadTunnels()}}
+
+async function clearEvents(){try{await api("/api/events",{method:"DELETE"});loadEvents()}catch(e){alert(e.message)}}
+
+function onTypeChange(){const ty=document.getElementById("tunnelType").value;const isTCP=ty==="tcp"||ty==="udp";const isHTTP=ty==="http";document.getElementById("remotePortGroup").style.display=isTCP?"block":"none";document.getElementById("httpAuthGroup").style.display=isHTTP?"grid":"none"}
+
+function showTunnelModal(){document.getElementById("tunnelModal").classList.add("show");document.getElementById("editId").value="";document.getElementById("tunnelModalTitle").textContent="添加隧道";document.getElementById("tunnelName").value="";document.getElementById("tunnelType").value="tcp";document.getElementById("tunnelLocalIP").value="127.0.0.1";document.getElementById("tunnelLocalPort").value="";document.getElementById("tunnelRemotePort").value="";document.getElementById("tunnelSubdomain").value="";document.getElementById("tunnelCustomDomains").value="";document.getElementById("tunnelHttpUser").value="";document.getElementById("tunnelHttpPassword").value="";document.getElementById("tunnelHostRewrite").value="";onTypeChange()}
+function closeTunnelModal(){document.getElementById("tunnelModal").classList.remove("show")}
+
+async function saveTunnel(){const id=document.getElementById("editId").value;
+const cd=document.getElementById("tunnelCustomDomains").value.trim();const domains=cd?cd.split(",").map(s=>s.trim()).filter(Boolean):[];
+const t={name:document.getElementById("tunnelName").value,type:document.getElementById("tunnelType").value,local_ip:document.getElementById("tunnelLocalIP").value,local_port:parseInt(document.getElementById("tunnelLocalPort").value)||0,remote_port:parseInt(document.getElementById("tunnelRemotePort").value)||0,subdomain:document.getElementById("tunnelSubdomain").value||"",custom_domains:domains,http_user:document.getElementById("tunnelHttpUser").value||"",http_password:document.getElementById("tunnelHttpPassword").value||"",host_header_rewrite:document.getElementById("tunnelHostRewrite").value||"",enabled:true};
+if(id){t.id=id;await api("/api/tunnels",{method:"PUT",body:t})}else{await api("/api/tunnels",{method:"POST",body:t})}
+closeTunnelModal();loadTunnels()}
+
+async function editTunnel(id){const ts=await api("/api/tunnels");const t=ts.find(x=>x.id===id);if(!t)return;
+document.getElementById("tunnelModal").classList.add("show");document.getElementById("editId").value=t.id;document.getElementById("tunnelModalTitle").textContent="编辑隧道";
+document.getElementById("tunnelName").value=t.name;document.getElementById("tunnelType").value=t.type;document.getElementById("tunnelLocalIP").value=t.local_ip;document.getElementById("tunnelLocalPort").value=t.local_port;document.getElementById("tunnelRemotePort").value=t.remote_port||"";document.getElementById("tunnelSubdomain").value=t.subdomain||"";document.getElementById("tunnelCustomDomains").value=(t.custom_domains||[]).join(",");document.getElementById("tunnelHttpUser").value=t.http_user||"";document.getElementById("tunnelHttpPassword").value=t.http_password||"";document.getElementById("tunnelHostRewrite").value=t.host_header_rewrite||"";onTypeChange()}
+
+async function deleteTunnel(id){if(!confirm("确定删除此隧道？"))return;await api("/api/tunnels?id="+encodeURIComponent(id),{method:"DELETE"});loadTunnels()}
+
+function showConfigModal(){document.getElementById("configModal").classList.add("show");api("/api/server-config").then(c=>{document.getElementById("cfgAddr").value=c.server_addr||"";document.getElementById("cfgPort").value=c.server_port||7000;document.getElementById("cfgAdminPort").value=c.admin_port||7400;document.getElementById("cfgToken").value=c.auth_token||"";document.getElementById("cfgSubDomain").value=c.sub_domain_host||"";document.getElementById("cfgAdminUser").value=c.admin_user||"admin";document.getElementById("cfgAdminPassword").value=c.admin_password||"admin";document.getElementById("cfgTLS").checked=c.tls_enabled!==false}).catch(()=>{})}
+function closeConfigModal(){document.getElementById("configModal").classList.remove("show")}
+async function saveConfig(){const c={server_addr:document.getElementById("cfgAddr").value,server_port:parseInt(document.getElementById("cfgPort").value),admin_port:parseInt(document.getElementById("cfgAdminPort").value),auth_token:document.getElementById("cfgToken").value,sub_domain_host:document.getElementById("cfgSubDomain").value,tls_enabled:document.getElementById("cfgTLS").checked,admin_user:document.getElementById("cfgAdminUser").value||"admin",admin_password:document.getElementById("cfgAdminPassword").value||"admin"};
+await api("/api/server-config",{method:"POST",body:c});closeConfigModal();loadStatus();loadServerConfig()}
+
+function esc(s){if(s==null)return"";return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+loadStatus();loadServerConfig();loadTunnels();loadEvents();loadSettings();
+setInterval(loadStatus,5000);setInterval(loadTunnels,5000);setInterval(loadEvents,5000);
+</script>
+</body>
+</html>

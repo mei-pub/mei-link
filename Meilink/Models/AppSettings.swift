@@ -1,17 +1,31 @@
 import Foundation
 
 enum MenuBarIconStyle: String, Codable, CaseIterable, Identifiable, Sendable {
-    case link
-    case appIcon
-    case text
+    case portal
+    case topology
+    case arrowRing
+    case waveform
+    case relay
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .link: return "链路图标"
-        case .appIcon: return "应用图标"
-        case .text: return "状态图标"
+        case .portal: return "门户"
+        case .topology: return "拓扑"
+        case .arrowRing: return "穿透"
+        case .waveform: return "信号"
+        case .relay: return "中继"
+        }
+    }
+
+    var imageName: String {
+        switch self {
+        case .portal: return "portal"
+        case .topology: return "topology"
+        case .arrowRing: return "arrow-ring"
+        case .waveform: return "waveform"
+        case .relay: return "relay"
         }
     }
 }
@@ -30,7 +44,7 @@ struct AppSettings: Codable, Sendable {
         showInDock: Bool = false,
         statusPollingInterval: TimeInterval = 3.0,
         remoteReachabilityInterval: TimeInterval = 60.0,
-        menuBarIconStyle: MenuBarIconStyle = .appIcon
+        menuBarIconStyle: MenuBarIconStyle = .portal
     ) {
         self.autoStart = autoStart
         self.launchAtLogin = launchAtLogin
@@ -56,7 +70,7 @@ struct AppSettings: Codable, Sendable {
         showInDock = try container.decodeIfPresent(Bool.self, forKey: .showInDock) ?? false
         statusPollingInterval = try container.decodeIfPresent(TimeInterval.self, forKey: .statusPollingInterval) ?? 3.0
         remoteReachabilityInterval = try container.decodeIfPresent(TimeInterval.self, forKey: .remoteReachabilityInterval) ?? 60.0
-        menuBarIconStyle = try container.decodeIfPresent(MenuBarIconStyle.self, forKey: .menuBarIconStyle) ?? .appIcon
+        menuBarIconStyle = try container.decodeIfPresent(MenuBarIconStyle.self, forKey: .menuBarIconStyle) ?? .portal
     }
 }
 

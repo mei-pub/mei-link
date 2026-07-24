@@ -45,6 +45,14 @@ class TunnelManager: ObservableObject {
                 }
             }
             self.addEvent("frpc 进程已退出，状态码: \(status)", level: status == 0 ? .info : .error)
+
+            // 自动重启：如果 frpc 非正常退出，尝试自动重启
+            if status != 0 {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    await self.recoverConnection(reason: "frpc 异常退出，正在自动重启")
+                }
+            }
         }
 
         loadConfiguration()
@@ -160,7 +168,8 @@ class TunnelManager: ObservableObject {
 
     func startIfNeeded() async {
         guard isConfigured, !isFrpcRunning else { return }
-        await start()
+        addEvent("应用启动，执行深度重启流程", level: .info)
+        await restart()
     }
 
     func stop() async {
@@ -187,10 +196,129 @@ class TunnelManager: ObservableObject {
         isConnected = false
     }
 
+    /// 强制终止 frpc 进程（应用退出时调用，确保 frpc 完全退出）
+    func killFrpcOnExit() {
+        if frpcProcess.isRunning, let pid = frpcProcess.processID {
+            frpcProcess.stopImmediately(timeout: 2.0)
+            if frpcProcess.isRunning {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: "/usr/bin/kill")
+                task.arguments = ["-9", "\(pid)"]
+                try? task.run()
+                task.waitUntilExit()
+            }
+        }
+    }
+
+    /// 强制释放指定端口（杀死占用该端口的进程）
+    private func releasePort(_ port: Int) {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        task.arguments = ["-ti", ":\(port)"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = nil
+        try? task.run()
+        task.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !output.isEmpty else { return }
+        for pidStr in output.components(separatedBy: "\n") {
+            let pid = pidStr.trimmingCharacters(in: .whitespaces)
+            guard !pid.isEmpty else { continue }
+            addEvent("释放端口 \(port): 杀死进程 \(pid)", level: .warning)
+            let killTask = Process()
+            killTask.executableURL = URL(fileURLWithPath: "/usr/bin/kill")
+            killTask.arguments = ["-9", pid]
+            try? killTask.run()
+            killTask.waitUntilExit()
+        }
+    }
+
     func restart() async {
-        await stop()
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        await start()
+        addEvent("开始深度重启...", level: .info)
+
+        // 第1层：停止状态轮询
+        statusTimer?.invalidate()
+        statusTimer = nil
+
+        // 第2层：停止 frpc 进程（逐级加强）
+        if frpcProcess.isRunning {
+            frpcProcess.stopImmediately(timeout: 3.0)
+            try? await Task.sleep(nanoseconds: 500_000_000)
+
+            // 如果 frpc 仍未退出，用 kill -9 强制终止
+            if frpcProcess.isRunning, let pid = frpcProcess.processID {
+                addEvent("frpc 进程未能退出，尝试强制终止", level: .warning)
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: "/usr/bin/kill")
+                task.arguments = ["-9", "\(pid)"]
+                try? task.run()
+                task.waitUntilExit()
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+        }
+
+        isFrpcRunning = false
+        isConnected = false
+
+        // 第3层：重新生成配置并启动 frpc（callback 驱动）
+        guard let config = serverConfig else {
+            addEvent("未配置服务器，重启失败", level: .error)
+            return
+        }
+
+        let toml = configGenerator.generate(serverConfig: config)
+        do {
+            let configPath = try configGenerator.writeToFile(toml)
+            try frpcProcess.start(configPath: configPath)
+        } catch {
+            addEvent("重启 frpc 失败: \(error.localizedDescription)", level: .error)
+            return
+        }
+        isFrpcRunning = true
+        isConnected = false
+
+        // 第4层：等待 Admin API 就绪（异步 callback）
+        adminAPI = FrpcAdminAPI(port: config.adminPort, user: config.adminUser, password: config.adminPassword)
+        waitForAdminAPIAsync(timeout: 15.0) { [weak self] success in
+            guard let self else { return }
+            guard success else {
+                self.addEvent("Admin API 未就绪，重启未完成", level: .error)
+                return
+            }
+
+            // 第5层：恢复所有启用的隧道
+            Task { @MainActor in
+                var restoredProxy = false
+                var restoreFailures: [String] = []
+                for tunnel in self.tunnels where tunnel.enabled {
+                    do {
+                        try await self.adminAPI?.createProxy(tunnel.toProxyDefinition(serverConfig: config))
+                        restoredProxy = true
+                    } catch {
+                        restoreFailures.append(tunnel.name)
+                        self.addEvent("恢复隧道 \"\(tunnel.name)\" 失败: \(error.localizedDescription)", level: .warning)
+                    }
+                }
+
+                if restoredProxy {
+                    do {
+                        try await self.adminAPI?.reload()
+                    } catch {
+                        self.addEvent("重载隧道配置失败: \(error.localizedDescription)", level: .warning)
+                    }
+                }
+
+                if !restoreFailures.isEmpty {
+                    self.isConnected = false
+                    self.addEvent("部分隧道恢复失败，等待自动重连: \(restoreFailures.joined(separator: ", "))", level: .warning)
+                }
+
+                self.startStatusPolling()
+                self.addEvent("深度重启完成", level: .info)
+            }
+        }
     }
 
     // MARK: - Tunnel CRUD
@@ -417,6 +545,22 @@ class TunnelManager: ObservableObject {
             try await Task.sleep(nanoseconds: 500_000_000)
         }
         throw MeilinkError.adminAPINotReady
+    }
+
+    /// 异步等待 Admin API 就绪，通过 callback 通知结果（不阻塞调用线程）
+    private func waitForAdminAPIAsync(timeout: TimeInterval, completion: @escaping (Bool) -> Void) {
+        Task { [weak self] in
+            guard let self else { return completion(false) }
+            let startTime = Date()
+            while Date().timeIntervalSince(startTime) < timeout {
+                if let api = self.adminAPI, (try? await api.healthCheck()) == true {
+                    completion(true)
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+            completion(false)
+        }
     }
 
     // MARK: - Events

@@ -10,11 +10,12 @@ struct SettingsView: View {
     @State private var authToken = ""
     @State private var subDomainHost = ""
     @State private var tlsEnabled = true
+    @State private var adminPort = "7400"
     @State private var launchAtLogin = false
     @State private var isSaving = false
     @State private var isTesting = false
     @State private var showToken = false
-    @State private var menuBarIconStyle: MenuBarIconStyle = .link
+    @State private var menuBarIconStyle: MenuBarIconStyle = .portal
     @State private var remoteReachabilityInterval: Double = 60
     @State private var saveError: String?
     @State private var testMessage: String?
@@ -22,25 +23,14 @@ struct SettingsView: View {
     @State private var showQuitConfirmation = false
 
     var onClose: (() -> Void)? = nil
-    private static let logTimestampFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter
-    }()
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    serverCard
-                    appCard
-                    eventsCard
-                }
-                .padding(24)
+            VStack(alignment: .leading, spacing: 12) {
+                serverCard
+                appCard
             }
+            .padding(16)
 
             if let saveError {
                 HStack(spacing: 8) {
@@ -55,7 +45,8 @@ struct SettingsView: View {
             Divider()
             footer
         }
-        .frame(width: 760, height: 840)
+        .frame(width: 760)
+        .fixedSize(horizontal: false, vertical: true)
         .onAppear {
             loadFields()
         }
@@ -73,44 +64,38 @@ struct SettingsView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("设置")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Text(statusSubtitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(manager.isConnected ? .green : manager.isFrpcRunning ? .yellow : .gray)
-                    .frame(width: 10, height: 10)
-                Text(manager.isConnected ? "已连接" : manager.isFrpcRunning ? "连接中" : "未连接")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8)
-        }
-        .padding(24)
-    }
-
     private var serverCard: some View {
         settingsSection(title: "服务器配置") {
             settingsRow("服务器地址") {
-                TextField("tunnel.example.com", text: $serverAddr)
-                    .textFieldStyle(.roundedBorder)
+                HStack(spacing: 8) {
+                    TextField("tunnel.example.com", text: $serverAddr)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 200)
+
+                    Button {
+                        testConnection()
+                    } label: {
+                        Label(isTesting ? "测试中" : "测试连接", systemImage: "network")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isTesting || serverAddr.isEmpty || serverPort.isEmpty)
+
+                    if let testMessage {
+                        Label(testMessage, systemImage: testSucceeded ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(testSucceeded ? .green : .red)
+                    }
+                }
             }
 
             settingsRow("客户端端口") {
                 TextField("7000", text: $serverPort)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 120)
+            }
+
+            settingsRow("管理端口") {
+                TextField("7400", text: $adminPort)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 120)
             }
@@ -149,23 +134,7 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
             }
 
-            HStack(spacing: 10) {
-                Button {
-                    testConnection()
-                } label: {
-                    Label(isTesting ? "测试中" : "测试连接", systemImage: "network")
-                }
-                .disabled(isTesting || serverAddr.isEmpty || serverPort.isEmpty)
-
-                if let testMessage {
-                    Label(testMessage, systemImage: testSucceeded ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .font(.caption)
-                        .foregroundColor(testSucceeded ? .green : .red)
-                }
-
-                Spacer()
             }
-            .padding(.top, 4)
         }
     }
 
@@ -183,15 +152,29 @@ struct SettingsView: View {
             }
 
             settingsRow("菜单栏图标") {
-                Picker("菜单栏图标", selection: $menuBarIconStyle) {
+                HStack(spacing: 8) {
                     ForEach(MenuBarIconStyle.allCases) { style in
-                        Text(style.displayName).tag(style)
+                        Button {
+                            updateMenuBarIconStyle(style)
+                        } label: {
+                            VStack(spacing: 4) {
+                                if let path = Bundle.main.path(forResource: style.imageName, ofType: "png"),
+                                   let img = NSImage(contentsOfFile: path) {
+                                    Image(nsImage: img)
+                                        .resizable()
+                                        .frame(width: 22, height: 22)
+                                }
+                                Text(style.displayName)
+                                    .font(.system(size: 9))
+                                    .foregroundColor(style == menuBarIconStyle ? .accentColor : .secondary)
+                            }
+                            .frame(width: 52)
+                            .padding(6)
+                            .background(style == menuBarIconStyle ? Color.accentColor.opacity(0.12) : Color.clear)
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
                     }
-                }
-                .labelsHidden()
-                .frame(width: 180)
-                .onChange(of: menuBarIconStyle) { newValue in
-                    updateMenuBarIconStyle(newValue)
                 }
 
                 Button {
@@ -226,63 +209,6 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
             }
         }
-    }
-
-    private var eventsCard: some View {
-        settingsSection(title: "最近事件") {
-            HStack(spacing: 10) {
-                Button {
-                    AppRuntime.shared.windows.showLogsWindow()
-                } label: {
-                    Label("查看完整日志", systemImage: "doc.text.magnifyingglass")
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    copyRecentEvents()
-                } label: {
-                    Label("复制最近事件", systemImage: "doc.on.doc")
-                }
-                .buttonStyle(.bordered)
-                .disabled(manager.events.isEmpty)
-
-                Spacer()
-            }
-
-            if manager.events.isEmpty {
-                Text("暂无事件")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(manager.events.prefix(8)) { event in
-                        HStack(alignment: .top, spacing: 8) {
-                            Text(event.timestamp, style: .time)
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .frame(width: 56, alignment: .leading)
-                            Text(event.message)
-                                .font(.caption)
-                                .lineLimit(2)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func copyRecentEvents() {
-        let text = manager.events
-            .prefix(20)
-            .reversed()
-            .map { event in
-                "[\(Self.logTimestampFormatter.string(from: event.timestamp))] [\(event.level.rawValue)] \(event.message)"
-            }
-            .joined(separator: "\n")
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        manager.addEvent("最近事件已复制到剪贴板")
     }
 
     private var footer: some View {
@@ -320,13 +246,6 @@ struct SettingsView: View {
         !subDomainHost.isEmpty
     }
 
-    private var statusSubtitle: String {
-        if let config = manager.serverConfig {
-            return "\(config.serverAddr):\(config.serverPort) · \(config.subDomainHost)"
-        }
-        return "配置 frps 服务器和隧道基础域名"
-    }
-
     private func settingsSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
@@ -357,6 +276,7 @@ struct SettingsView: View {
             authToken = config.authToken
             subDomainHost = config.subDomainHost
             tlsEnabled = config.tlsEnabled
+            adminPort = String(config.adminPort)
         }
         launchAtLogin = AutoStartManager.isEnabled
         menuBarIconStyle = manager.appSettings.menuBarIconStyle
@@ -398,6 +318,7 @@ struct SettingsView: View {
     }
 
     private func updateMenuBarIconStyle(_ style: MenuBarIconStyle) {
+        menuBarIconStyle = style  // 立即更新本地 state
         var settings = manager.appSettings
         settings.menuBarIconStyle = style
         do {
@@ -422,7 +343,11 @@ struct SettingsView: View {
 
     private func saveConfiguration(restartAfterSave: Bool) {
         guard let port = Int(serverPort) else {
-            saveError = "端口必须是数字"
+            saveError = "客户端端口必须是数字"
+            return
+        }
+        guard let adminPortValue = Int(adminPort) else {
+            saveError = "管理端口必须是数字"
             return
         }
 
@@ -431,7 +356,8 @@ struct SettingsView: View {
             serverPort: port,
             authToken: authToken,
             subDomainHost: subDomainHost,
-            tlsEnabled: tlsEnabled
+            tlsEnabled: tlsEnabled,
+            adminPort: adminPortValue
         )
 
         isSaving = true

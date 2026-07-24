@@ -20,9 +20,7 @@ struct TunnelEditView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-
-            VStack {
+            ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     formSection("基本信息") {
                         formRow("隧道名称") {
@@ -80,14 +78,13 @@ struct TunnelEditView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 28)
-                .padding(.vertical, 16)
+                .padding(20)
             }
-            .frame(maxHeight: .infinity, alignment: .top)
 
             footer
         }
-        .frame(width: 660, height: 800)
+        .frame(width: 660)
+        .fixedSize(horizontal: false, vertical: true)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             if let tunnel = tunnel {
@@ -100,22 +97,6 @@ struct TunnelEditView: View {
                 enabled = tunnel.enabled
             }
         }
-    }
-
-    private var header: some View {
-        VStack(spacing: 6) {
-            Text(isEditing ? "编辑隧道" : "添加新隧道")
-                .font(.title3)
-                .fontWeight(.bold)
-
-            Text(typeHint)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 24)
-        .padding(.bottom, 18)
     }
 
     private var footer: some View {
@@ -182,15 +163,6 @@ struct TunnelEditView: View {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && Int(localPort) != nil
             && !isSaving
-    }
-
-    private var typeHint: String {
-        switch type {
-        case .http, .https:
-            return "通过子域名发布本机 HTTP 服务"
-        case .tcp, .udp:
-            return "通过远程端口转发本机 TCP/UDP 服务"
-        }
     }
 
     private func saveTunnel() {
