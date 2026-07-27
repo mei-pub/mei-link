@@ -4,3 +4,7 @@ build/dist/
 .DS_Store
 *.swp
 *~
+
+# IDE configs
+.codeflicker/
+.zcode/

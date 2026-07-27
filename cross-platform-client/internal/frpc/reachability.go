@@ -90,3 +90,20 @@ func (p *ReachabilityProbe) checkTCP(host string, port int) ReachabilityResult {
 	conn.Close()
 	return ReachabilityReachable
 }
+
+// TestConnection probes an arbitrary host:port via TCP with a 5-second timeout.
+// Mirrors Swift NetworkHelper.testConnection. Returns (ok, errMessage).
+// Used by the "测试连接" button in settings/setup to verify VPS reachability
+// before saving the server config.
+func TestConnection(host string, port int) (bool, string) {
+	if host == "" || port <= 0 {
+		return false, "地址或端口无效"
+	}
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	if err != nil {
+		return false, err.Error()
+	}
+	conn.Close()
+	return true, ""
+}

@@ -108,8 +108,17 @@ func TestTunnelAPIUsesSwiftCompatiblePersistenceAcrossCRUD(t *testing.T) {
 	if strings.Contains(string(data), "runtimeStatus") {
 		t.Fatalf("tunnels.json persisted runtimeStatus: %s", data)
 	}
-	if !strings.Contains(string(data), `"status": "closed"`) {
-		t.Fatalf("tunnels.json missing Swift status field: %s", data)
+	// Per SDD 05-data-contract §2.1, runtime fields (status, errorMessage,
+	// remoteAddr) must NOT be persisted — the Swift native client treats them
+	// as transient values overwritten by pollStatus. Persisting them makes
+	// Swift read stale "closed" status on launch.
+	for _, field := range []string{`"status"`, `"errorMessage"`, `"remoteAddr"`} {
+		if strings.Contains(string(data), field) {
+			t.Fatalf("tunnels.json persisted runtime field %s: %s", field, data)
+		}
+	}
+	if !strings.Contains(string(data), `"customDomains": []`) {
+		t.Fatalf("tunnels.json missing customDomains (Swift non-optional): %s", data)
 	}
 	if !strings.Contains(string(data), `"name": "web-renamed"`) {
 		t.Fatalf("tunnels.json missing update: %s", data)

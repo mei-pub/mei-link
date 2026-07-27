@@ -166,10 +166,21 @@ fn wait_for_sidecar(app: AppHandle) {
                 let port: u16 = content.trim().parse().unwrap_or(0);
                 if port > 0 {
                     let url = format!("http://127.0.0.1:{}", port);
-                    // Verify the server is actually up by reading the port file
-                    // (the sidecar writes it after the HTTP server starts).
                     *url_state.0.lock().unwrap() = url.clone();
                     let _ = app2.emit("sidecar-ready", &url);
+                    // Also inject the API base directly into every webview's
+                    // JS context. This is a belt-and-suspenders fallback so
+                    // the frontend can read window.__MEILINK_API_BASE__ even
+                    // if the invoke("get_api_url") poll or the sidecar-ready
+                    // listener misses (e.g. module load races Tauri internals
+                    // injection in Vite dev mode).
+                    let inject = format!(
+                        "window.__MEILINK_API_BASE__={:?};window.__MEILINK_API_READY__=true;",
+                        url
+                    );
+                    for (_, window) in app2.webview_windows() {
+                        let _ = window.eval(&inject);
+                    }
                     return;
                 }
             }
@@ -256,6 +267,20 @@ pub fn run() {
                                         popover_width,
                                     );
                                     let _ = popover.set_position(pos);
+                                    // Compute the arrow offset relative to the popover's
+                                    // left edge so the arrow points at the tray icon center.
+                                    // Mirrors Swift MenuBarPanelChrome: clamp to [24, width-24].
+                                    let popover_x = pos.x as f64;
+                                    let tray_center_x = tray_pos.x + tray_size.width / 2.0;
+                                    let arrow_offset = {
+                                        let raw = tray_center_x - popover_x;
+                                        let min = 24.0;
+                                        let max = popover_width - 24.0;
+                                        if raw < min { min }
+                                        else if raw > max { max }
+                                        else { raw }
+                                    };
+                                    let _ = app.emit("popover-arrow-offset", arrow_offset);
                                 }
                                 #[cfg(not(target_os = "macos"))]
                                 {
@@ -372,7 +397,7 @@ mod tests {
 
         assert_eq!(size_for("popover"), (330, 440));
         assert_eq!(size_for("main"), (1060, 820));
-		assert_eq!(size_for("settings"), (760, 640));
+        assert_eq!(size_for("settings"), (760, 460));
         assert_eq!(size_for("setup"), (560, 640));
         assert_eq!(size_for("tunnel-edit"), (660, 440));
         assert_eq!(size_for("logs"), (820, 620));

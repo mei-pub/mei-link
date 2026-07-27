@@ -98,6 +98,42 @@ func NewManager(cfgDir string) (*Manager, error) {
 		m.frpc = frpc.NewProcess(binPath)
 	}
 
+	// Wire frpc process callbacks. OnTermination triggers automatic recovery
+	// when frpc exits abnormally (non-zero status); OnOutput forwards each
+	// stdout/stderr line into the event log as "frpc: <line>". Mirrors Swift
+	// FrpcProcess.onTermination / onOutput.
+	m.frpc.OnOutput = func(line string) {
+		m.addEvent("frpc: "+line, "info")
+	}
+	m.frpc.OnTermination = func(status int) {
+		m.mu.Lock()
+		m.isFrpcRunning = false
+		m.isConnected = false
+		m.ownsFrpc = false
+		m.stopStatusPolling()
+		for i := range m.tunnels {
+			if m.tunnels[i].Enabled {
+				m.tunnels[i].RuntimeStatus = string(config.StatusClosed)
+				m.tunnels[i].ErrorMessage = fmt.Sprintf("frpc 进程已退出，状态码: %d", status)
+			}
+		}
+		m.mu.Unlock()
+		level := "info"
+		if status != 0 {
+			level = "error"
+		}
+		m.addEvent(fmt.Sprintf("frpc 进程已退出，状态码: %d", status), level)
+
+		// Auto-recover only on abnormal exit (status != 0). A normal stop
+		// (status == 0) is user-initiated via Stop()/Restart(); do not recover.
+		if status != 0 {
+			go func() {
+				time.Sleep(2 * time.Second) // 防抖，与 Swift 对齐
+				m.recoverConnection(fmt.Sprintf("frpc 异常退出（状态码 %d），正在自动重启", status))
+			}()
+		}
+	}
+
 	return m, nil
 }
 

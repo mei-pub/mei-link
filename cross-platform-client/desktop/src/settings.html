@@ -54,10 +54,11 @@
       </div>
       <div class="form-group"><label>认证 Token</label><div style="display:flex;gap:4px;align-items:center"><input id="token" class="form-input" type="password" style="width:140px;max-width:140px;min-width:140px;flex:0 0 auto"><button class="btn btn-sm" id="tokenEye" aria-label="显示或隐藏 Token" title="显示或隐藏 Token" style="flex-shrink:0;padding:4px 6px"></button></div></div>
       <div class="form-group"><label>子域名基域</label><input id="subdomain" class="form-input"></div>
-      <div class="setting-row"><div><label>启用 TLS 连接</label><div class="desc">加密 frpc 到 frps 的控制连接。</div></div><label class="toggle"><input type="checkbox" id="tls" checked><span class="slider"></span></label></div>
+      <div class="setting-row"><div><label>启用 TLS 连接</label><div class="desc">加密 frpc 到 frps 的控制连接，不等同于 HTTPS 隧道。</div></div><label class="toggle"><input type="checkbox" id="tls" checked><span class="slider"></span></label></div>
     </div>
     <div class="section-card">
       <h3>应用设置</h3>
+      <div class="setting-row"><div><label>开机自启动</label><div class="desc" id="autostartDesc">登录系统后自动启动 Meilink。</div></div><label class="toggle"><input type="checkbox" id="autostartToggle"><span class="slider"></span></label></div>
       <div class="setting-row"><div><label>菜单栏图标</label><div class="desc">选择菜单栏图标的样式。</div></div></div>
       <div class="icon-grid" id="iconGrid"></div>
       <div class="setting-row" style="margin-top:6px"><div><label>远程探测间隔</label><div class="desc">降低外部端口探测频率。</div></div><div style="display:flex;align-items:center;gap:6px"><button class="btn btn-sm" id="probeDown" aria-label="减少远程探测间隔" title="减少远程探测间隔">−</button><span id="probeVal">60 秒</span><button class="btn btn-sm" id="probeUp" aria-label="增加远程探测间隔" title="增加远程探测间隔">+</button></div></div>
@@ -112,12 +113,26 @@ document.getElementById("testBtn").onclick = async () => {
   const addr = document.getElementById("addr").value.trim();
   const port = parseInt(document.getElementById("port").value) || 7000;
   if (!addr) return;
-  document.getElementById("testBtn").textContent = "测试中…";
-  try { await fetch(`http://${addr}:${port}`).catch(()=>{}); document.getElementById("testResult").innerHTML = '<span style="color:var(--success)">连接成功</span>'; } catch(e) { document.getElementById("testResult").innerHTML = '<span style="color:var(--success)">端口可达</span>'; }
-  document.getElementById("testBtn").textContent = "测试连接";
+  const btn = document.getElementById("testBtn"); btn.textContent = "测试中…"; btn.disabled = true;
+  const result = document.getElementById("testResult");
+  try {
+    const r = await api.testConnection(addr, port);
+    if (r.ok) { result.innerHTML = '<span style="color:var(--success)">连接成功</span>'; }
+    else { result.innerHTML = '<span style="color:var(--danger)">连接失败: ' + esc(r.err || "") + '</span>'; }
+  } catch(e) { result.innerHTML = '<span style="color:var(--danger)">连接失败: ' + esc(e.message) + '</span>'; }
+  btn.textContent = "测试连接"; btn.disabled = false;
 };
 document.getElementById("probeDown").onclick = () => { probeInterval = Math.max(30, probeInterval - 15); document.getElementById("probeVal").textContent = `${probeInterval} 秒`; };
 document.getElementById("probeUp").onclick = () => { probeInterval = Math.min(600, probeInterval + 15); document.getElementById("probeVal").textContent = `${probeInterval} 秒`; };
+document.getElementById("autostartToggle").onchange = async (e) => {
+  const enabled = e.target.checked;
+  try {
+    await api.setAutostart(enabled);
+  } catch(err) {
+    alert("设置自启动失败: " + (err.message || err));
+    e.target.checked = !enabled;
+  }
+};
 document.getElementById("quitBtn").onclick = () => { quitApp(); };
 document.getElementById("saveBtn").onclick = () => save(false);
 document.getElementById("saveRestartBtn").onclick = () => save(true);
@@ -203,6 +218,19 @@ async function refresh() {
         });
       }
     }
+    try {
+      const auto = await api.getAutostart();
+      const toggle = document.getElementById("autostartToggle");
+      const desc = document.getElementById("autostartDesc");
+      toggle.checked = !!auto.enabled;
+      if (!auto.available) {
+        toggle.disabled = true;
+        desc.textContent = "当前平台不支持开机自启动。";
+      } else {
+        toggle.disabled = false;
+        desc.textContent = "登录系统后自动启动 Meilink。";
+      }
+    } catch(e) { /* autostart endpoint may be missing on older sidecar */ }
   } catch(e) { console.error(e); }
 }
 refresh();

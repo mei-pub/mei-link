@@ -81,7 +81,7 @@ import { icons } from "./lib/icons.js";
 
 document.getElementById("appLogo").innerHTML = '<img src="/icons/app-icon.png" width="36" height="36" style="border-radius:8px;object-fit:contain">';
 document.getElementById("connBtn").innerHTML = icons.play + " 连接";
-document.getElementById("restartBtn").innerHTML = icons.restart + " 深度重启";
+document.getElementById("restartBtn").innerHTML = icons.restart + " 重启";
 document.getElementById("settingsBtn").innerHTML = icons.settings;
 document.getElementById("addBtn").innerHTML = icons.plus + " 添加隧道";
 document.getElementById("logsBtn").innerHTML = icons.log + " 查看日志";
@@ -113,7 +113,7 @@ document.getElementById("restartBtn").onclick = async () => {
     alert("重启失败: " + e.message);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = icons.restart + " 深度重启";
+    btn.innerHTML = icons.restart + " 重启";
     refresh();
   }
 };

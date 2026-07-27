@@ -12,7 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/meilink/client/internal/autostart"
 	"github.com/meilink/client/internal/config"
+	"github.com/meilink/client/internal/frpc"
 	"github.com/meilink/client/internal/tunnel"
 )
 
@@ -32,12 +34,36 @@ func (s *Server) buildMux() http.Handler {
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/server-config", s.handleServerConfig)
+	mux.HandleFunc("/api/test-connection", s.handleTestConnection)
+	mux.HandleFunc("/api/autostart", s.handleAutostart)
 	mux.HandleFunc("/api/tunnels", s.handleTunnels)
 	mux.HandleFunc("/api/tunnels/", s.handleTunnelAction)
 	mux.HandleFunc("/api/control/", s.handleControl)
 	mux.HandleFunc("/api/events", s.handleEvents)
 	mux.HandleFunc("/api/settings", s.handleSettings)
-	return mux
+	// Wrap the mux in a CORS middleware. The sidecar listens on 127.0.0.1 only,
+	// so cross-origin access from the Tauri webview (tauri://) or the Vite dev
+	// server (http://localhost:17420) needs explicit CORS headers. Without
+	// these, the browser's "Failed to fetch" error blocks the frontend from
+	// reaching the sidecar even when apiBase is correctly resolved.
+	return corsMiddleware(mux)
+}
+
+// corsMiddleware adds permissive CORS headers for localhost origins. The
+// sidecar is bound to 127.0.0.1 so the risk of allowing all origins is
+// minimal; this primarily unblocks the Vite dev server and the Tauri
+// webview when Tauri's own CSP isn't enough (e.g. during development).
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // NewServer creates a new web server.
@@ -226,6 +252,67 @@ func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleTestConnection(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	var body struct {
+		Addr string `json:"addr"`
+		Port int    `json:"port"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	ok, msg := frpc.TestConnection(body.Addr, body.Port)
+	resp := map[string]interface{}{"ok": ok}
+	if !ok {
+		resp["err"] = msg
+	}
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleAutostart(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	switch r.Method {
+	case http.MethodGet:
+		enabled, available := autostart.IsEnabled(), autostart.Available()
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"enabled":   enabled,
+			"available": available,
+		})
+	case http.MethodPost:
+		var body struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		if !autostart.Available() {
+			http.Error(w, "当前平台不支持开机自启动", 501)
+			return
+		}
+		var err error
+		if body.Enabled {
+			err = autostart.Enable()
+		} else {
+			err = autostart.Disable()
+		}
+		if err != nil {
+			s.manager.AddEvent("设置自启动失败: "+err.Error(), "error")
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		s.manager.AddEvent("开机自启动已"+map[bool]string{true: "启用", false: "禁用"}[body.Enabled], "info")
+		w.WriteHeader(http.StatusOK)
+	default:
+		http.Error(w, "method not allowed", 405)
+	}
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {

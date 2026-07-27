@@ -134,8 +134,15 @@ func (t *Tunnel) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalJSON emits the full tunnel shape including runtime fields
+// (RuntimeStatus / ErrorMessage / RemoteAddr) so the HTTP API can return
+// them to the frontend. Persistence is handled separately by SaveTunnels,
+// which strips runtime fields before writing to tunnels.json (see SDD
+// 05-data-contract §2.1 — those are transient values that must not be
+// persisted, otherwise the Swift native client reads stale "closed" status
+// on launch).
 func (t Tunnel) MarshalJSON() ([]byte, error) {
-	aux := struct {
+	type tunnelJSON struct {
 		ID                string     `json:"id"`
 		Name              string     `json:"name"`
 		Type              TunnelType `json:"type"`
@@ -143,7 +150,7 @@ func (t Tunnel) MarshalJSON() ([]byte, error) {
 		LocalPort         int        `json:"localPort"`
 		RemotePort        int        `json:"remotePort,omitempty"`
 		Subdomain         string     `json:"subdomain,omitempty"`
-		CustomDomains     []string   `json:"customDomains,omitempty"`
+		CustomDomains     []string   `json:"customDomains"`
 		HTTPUser          string     `json:"httpUser,omitempty"`
 		HTTPPassword      string     `json:"httpPassword,omitempty"`
 		HostHeaderRewrite string     `json:"hostHeaderRewrite,omitempty"`
@@ -153,7 +160,8 @@ func (t Tunnel) MarshalJSON() ([]byte, error) {
 		RemoteAddr        string     `json:"remoteAddr,omitempty"`
 		CreatedAt         time.Time  `json:"createdAt"`
 		UpdatedAt         time.Time  `json:"updatedAt"`
-	}{
+	}
+	aux := tunnelJSON{
 		ID:                t.ID,
 		Name:              t.Name,
 		Type:              t.Type,
@@ -172,10 +180,57 @@ func (t Tunnel) MarshalJSON() ([]byte, error) {
 		CreatedAt:         t.CreatedAt,
 		UpdatedAt:         t.UpdatedAt,
 	}
+	if aux.CustomDomains == nil {
+		aux.CustomDomains = []string{}
+	}
 	if aux.Status == "" {
 		aux.Status = "new"
 	}
 	return json.Marshal(aux)
+}
+
+// persistentTunnel is the on-disk shape. It omits runtime fields so the
+// Swift native client (which declares status/errorMessage/remoteAddr as
+// transient) never reads stale values from tunnels.json.
+type persistentTunnel struct {
+	ID                string     `json:"id"`
+	Name              string     `json:"name"`
+	Type              TunnelType `json:"type"`
+	LocalIP           string     `json:"localIP"`
+	LocalPort         int        `json:"localPort"`
+	RemotePort        int        `json:"remotePort,omitempty"`
+	Subdomain         string     `json:"subdomain,omitempty"`
+	CustomDomains     []string   `json:"customDomains"`
+	HTTPUser          string     `json:"httpUser,omitempty"`
+	HTTPPassword      string     `json:"httpPassword,omitempty"`
+	HostHeaderRewrite string     `json:"hostHeaderRewrite,omitempty"`
+	Enabled           bool       `json:"enabled"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	UpdatedAt         time.Time  `json:"updatedAt"`
+}
+
+// toPersistent converts a Tunnel to its on-disk shape (no runtime fields).
+func (t Tunnel) toPersistent() persistentTunnel {
+	p := persistentTunnel{
+		ID:                t.ID,
+		Name:              t.Name,
+		Type:              t.Type,
+		LocalIP:           t.LocalIP,
+		LocalPort:         t.LocalPort,
+		RemotePort:        t.RemotePort,
+		Subdomain:         t.Subdomain,
+		CustomDomains:     t.CustomDomains,
+		HTTPUser:          t.HTTPUser,
+		HTTPPassword:      t.HTTPPassword,
+		HostHeaderRewrite: t.HostHeaderRewrite,
+		Enabled:           t.Enabled,
+		CreatedAt:         t.CreatedAt,
+		UpdatedAt:         t.UpdatedAt,
+	}
+	if p.CustomDomains == nil {
+		p.CustomDomains = []string{}
+	}
+	return p
 }
 
 func normalizeStoredStatus(status string) string {
@@ -322,7 +377,14 @@ func (m *Manager) LoadServerConfig() (*ServerConfig, error) {
 
 // SaveTunnels persists all tunnels.
 func (m *Manager) SaveTunnels(tunnels []Tunnel) error {
-	data, err := json.MarshalIndent(tunnels, "", "  ")
+	// Write the persistent shape (no runtime fields) so the Swift native
+	// client can decode tunnels.json without reading stale status/errorMessage
+	// values (see SDD 05-data-contract §2.1).
+	persistent := make([]persistentTunnel, len(tunnels))
+	for i := range tunnels {
+		persistent[i] = tunnels[i].toPersistent()
+	}
+	data, err := json.MarshalIndent(persistent, "", "  ")
 	if err != nil {
 		return err
 	}

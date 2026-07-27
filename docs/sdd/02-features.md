@@ -200,6 +200,15 @@
 - **API**：`SMAppService.mainApp.register/unregister`，`status == .enabled` 判断已启用。
 - **触发**：SettingsView 的"开机自启动"Toggle `onChange` 即时注册/注销。
 
+#### 跨平台客户端对齐
+- **API 端点**：`GET /api/autostart` 返回 `{enabled, available}`；`POST /api/autostart {enabled}` 注册/注销
+- **平台实现**（`cross-platform-client/internal/autostart/`）：
+  - macOS：写 `~/Library/LaunchAgents/com.meilink.client.plist` + `launchctl load/unload`
+  - Linux：写 `~/.config/systemd/user/meilink-client.service` + `systemctl --user enable/disable`
+  - Windows：注册表 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 写 `Meilink` 值
+  - 其他平台：`available: false`，前端禁用 Toggle
+- **触发**：settings.html 的"开机自启动"Toggle `onchange` 即时调 `api.setAutostart(enabled)`
+
 ## F9 · 服务端部署
 
 ### F9.1 Shell 脚本部署

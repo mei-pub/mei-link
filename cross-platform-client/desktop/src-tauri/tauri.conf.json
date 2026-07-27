@@ -36,18 +36,16 @@
         "minWidth": 980,
         "minHeight": 740,
         "visible": false,
-        "backgroundColor": "#ffffff","theme": "Light"
+        "backgroundColor": "#ffffff"
       },
       {
         "label": "settings",
         "url": "settings.html",
         "title": "设置",
         "width": 760,
-        "height": 640,
-        "minWidth": 600,
-        "minHeight": 600,
+        "height": 460,
         "visible": false,
-        "backgroundColor": "#ffffff","theme": "Light"
+        "backgroundColor": "#ffffff"
       },
       {
         "label": "setup",
@@ -57,7 +55,7 @@
         "height": 640,
         "resizable": false,
         "visible": false,
-        "backgroundColor": "#ffffff","theme": "Light"
+        "backgroundColor": "#ffffff"
       },
       {
         "label": "tunnel-edit",
@@ -68,7 +66,7 @@
         "minWidth": 600,
         "minHeight": 380,
         "visible": false,
-        "backgroundColor": "#ffffff","theme": "Light"
+        "backgroundColor": "#ffffff"
       },
       {
         "label": "logs",
@@ -79,7 +77,7 @@
         "minWidth": 760,
         "minHeight": 560,
         "visible": false,
-        "backgroundColor": "#ffffff","theme": "Light"
+        "backgroundColor": "#ffffff"
       }
     ],
     "security": {

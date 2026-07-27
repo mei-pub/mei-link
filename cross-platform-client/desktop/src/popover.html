@@ -7,7 +7,7 @@
   html, body { background: transparent; margin: 0; padding: 0; width: 330px; height: 440px; overflow: hidden; }
   .popover-shell { width: 330px; height: 440px; display: flex; flex-direction: column; align-items: stretch; }
   .popover-arrow-row { height: 12px; width: 330px; position: relative; flex: 0 0 12px; }
-  .popover-arrow { position: absolute; left: calc(50% - 9px); top: 0; width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 12px solid rgba(255,255,255,0.9); filter: drop-shadow(0 1px 1px rgba(0,0,0,.08)); }
+  .popover-arrow { position: absolute; left: var(--arrow-offset, calc(50% - 9px)); top: 0; width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 12px solid rgba(255,255,255,0.9); filter: drop-shadow(0 1px 1px rgba(0,0,0,.08)); transition: left 0.1s ease-out; }
   .popover { padding: 14px; display: flex; flex-direction: column; gap: 14px; height: 428px; background: rgba(255,255,255,0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 16px; box-shadow: 0 8px 26px rgba(0,0,0,.22); overflow: hidden; }
   .status-card { padding: 12px; border-radius: 10px; background: rgba(0,0,0,0.04); }
   .status-header { display: flex; align-items: center; gap: 8px; }
@@ -61,6 +61,39 @@
 <script type="module">
 import { api, openWindow, quitApp, openUrl, copyText, closeWindow, overallStatus, routeText, canOpen, STATUS_LABELS, esc, tunnelStatus } from "./lib/api.js";
 import { icons } from "./lib/icons.js";
+
+// Listen for arrow-offset events from Rust so the popover arrow follows the
+// tray icon position (mirrors Swift MenuBarPanelChrome arrow alignment).
+// Wrapped in an async IIFE to avoid top-level await (not supported by the
+// configured esbuild target).
+(async () => {
+  try {
+    const { listen } = await import("@tauri-apps/api/event");
+    await listen("popover-arrow-offset", (event) => {
+      const offset = Number(event.payload);
+      if (Number.isFinite(offset)) {
+        // offset is the arrow's left position relative to the popover (0..width).
+        // Subtract 9px so the 18px-wide arrow centers on that point.
+        document.documentElement.style.setProperty("--arrow-offset", `${offset - 9}px`);
+      }
+    });
+  } catch(e) { /* not in tauri context */ }
+
+  // Auto-hide when the popover window loses focus (click outside). Mirrors the
+  // Swift StatusBarController installEventMonitors behavior. The Rust side
+  // already hides on WindowEvent::Focused(false); this is a front-end fallback
+  // to make sure blur is reliably caught (popover is borderless + skipTaskbar,
+  // which can occasionally miss focus events on some platforms).
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const win = getCurrentWindow();
+    win.onFocusChanged(({ payload: focused }) => {
+      if (!focused) {
+        win.hide().catch(() => {});
+      }
+    });
+  } catch(e) { /* not in tauri context */ }
+})();
 
 document.getElementById("playBtn").innerHTML = icons.play;
 document.getElementById("playBtn").onclick = async () => { try { const s = await api.getStatus(); if (s.running) await api.stop(); else await api.start(); refresh(); } catch(e){} };

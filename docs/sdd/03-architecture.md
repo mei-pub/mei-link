@@ -104,6 +104,14 @@ sequenceDiagram
 - stdout/stderr 通过 `Pipe.readabilityHandler` 异步按行回调
 - `terminationHandler` 在主线程派发 `onTermination`
 
+#### 跨平台 Go 实现对齐（`cross-platform-client/internal/frpc/process.go`）
+Go 端 `Process` 同样提供 `OnOutput func(line string)` 与 `OnTermination func(status int)` 回调：
+- `Start` 用 `io.Pipe` + `bufio.Scanner` 按行扫描 stdout/stderr，trim 后非空行回调 `OnOutput`
+- 开 goroutine 调 `cmd.Wait()`，结束后调 `OnTermination(status)`（status != 0 表示异常退出）
+- `Stop` / `StopImmediately` 不再调 `cmd.Wait()`（由 Wait goroutine 拥有），只 `Kill` + 关 logFile + 置 nil
+- Windows 平台 `applyPlatformAttrs` 设置 `SysProcAttr{CreationFlags: 0x08000000}` (CREATE_NO_WINDOW) 隐藏控制台
+- `TunnelManager.NewManager` 注册回调：`OnOutput` 把每行作为 `frpc: <line>` 事件；`OnTermination` 非 0 退出时 sleep 2s 防抖后 `recoverConnection`，状态置 closed
+
 ### 3.5 `FrpcAdminAPI`（非 MainActor）
 - baseURL = `http://127.0.0.1:<adminPort>`
 - Basic Auth header 预编码

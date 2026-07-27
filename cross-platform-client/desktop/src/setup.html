@@ -52,7 +52,7 @@
 </div>
 
 <script type="module">
-import { api, closeWindow } from "./lib/api.js";
+import { api, closeWindow, esc } from "./lib/api.js";
 import { icons } from "./lib/icons.js";
 
 document.getElementById("cancelBtn").onclick = () => closeWindow();
@@ -63,8 +63,11 @@ document.getElementById("testBtn").onclick = async () => {
   if (!addr) return;
   const btn = document.getElementById("testBtn"); btn.textContent = "测试中…"; btn.disabled = true;
   const result = document.getElementById("testResult"); result.style.display = "flex";
-  try { await fetch(`http://${addr}:${port}`).catch(()=>{}); result.className = "test-result ok"; result.innerHTML = icons.check + " 连接成功"; }
-  catch(e) { result.className = "test-result ok"; result.innerHTML = icons.check + " 端口可达"; }
+  try {
+    const r = await api.testConnection(addr, port);
+    if (r.ok) { result.className = "test-result ok"; result.innerHTML = icons.check + " 连接成功"; }
+    else { result.className = "test-result fail"; result.innerHTML = icons.close + " 连接失败: " + esc(r.err || ""); }
+  } catch(e) { result.className = "test-result fail"; result.innerHTML = icons.close + " 连接失败: " + esc(e.message || e); }
   btn.textContent = "测试连接"; btn.disabled = false;
 };
 

@@ -195,11 +195,22 @@ func TestSaveTunnelsWritesSwiftStatusField(t *testing.T) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := raw[0]["runtimeStatus"]; ok {
-		t.Fatalf("tunnels.json should not persist runtimeStatus: %s", data)
+	// Runtime-only fields must NOT be persisted (SDD 05-data-contract §2.1).
+	// Swift's Tunnel struct treats status/errorMessage/remoteAddr as transient
+	// values overwritten by pollStatus; persisting them makes the Swift client
+	// read stale "closed" status on launch.
+	for _, field := range []string{"runtimeStatus", "status", "errorMessage", "remoteAddr"} {
+		if _, ok := raw[0][field]; ok {
+			t.Fatalf("tunnels.json should not persist runtime field %q: %s", field, data)
+		}
 	}
-	if got := raw[0]["status"]; got != "waitStart" {
-		t.Fatalf("status = %v, want waitStart in Swift Codable format; json=%s", got, data)
+	// customDomains must be present (even if empty) because Swift's Tunnel
+	// struct declares it as a non-optional [String]; omitting it makes
+	// Swift's Codable decoder fail and loadTunnels() return an empty array.
+	if got, ok := raw[0]["customDomains"]; !ok {
+		t.Fatalf("customDomains must be present (Swift non-optional); json=%s", data)
+	} else if arr, ok := got.([]interface{}); !ok || len(arr) != 0 {
+		t.Fatalf("customDomains = %v, want empty [] ; json=%s", got, data)
 	}
 }
 
@@ -244,10 +255,16 @@ func TestNormalizeTunnelsFileMigratesLegacyRuntimeStatus(t *testing.T) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := raw[0]["runtimeStatus"]; ok {
-		t.Fatalf("legacy runtimeStatus should be migrated away: %s", data)
+	// After migration, runtime fields must be gone (SDD 05-data-contract §2.1).
+	for _, field := range []string{"runtimeStatus", "status", "errorMessage", "remoteAddr"} {
+		if _, ok := raw[0][field]; ok {
+			t.Fatalf("runtime field %q should not be persisted after migration: %s", field, data)
+		}
 	}
-	if got := raw[0]["status"]; got != "waitStart" {
-		t.Fatalf("status = %v, want waitStart after migration; json=%s", got, data)
+	// customDomains must be present as empty array for Swift compatibility.
+	if got, ok := raw[0]["customDomains"]; !ok {
+		t.Fatalf("customDomains must be present after migration; json=%s", data)
+	} else if arr, ok := got.([]interface{}); !ok || len(arr) != 0 {
+		t.Fatalf("customDomains = %v, want empty [] ; json=%s", got, data)
 	}
 }
