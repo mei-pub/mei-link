@@ -88,41 +88,65 @@ jobs:
       - name: Build Swift binary via SwiftPM
         shell: bash
         run: |
+          set +e
           echo "=== swift --version ==="
           swift --version
-          echo "=== swift build -c release ==="
-          swift build -c release 2>&1 | tail -30
-          echo "=== locate binary ==="
+          echo "=== swift build -c release (full output) ==="
+          swift build -c release 2>&1
+          SWIFT_RC=$?
+          echo "swift build exit code: $SWIFT_RC"
+          if [ $SWIFT_RC -ne 0 ]; then
+            echo "! swift build failed"
+            exit 1
+          fi
           BIN_PATH="$(swift build -c release --show-bin-path)/Meilink"
           echo "binary at: $BIN_PATH"
-          ls -lh "$BIN_PATH" || { echo "! binary not found"; exit 1; }
+          if [ ! -f "$BIN_PATH" ]; then
+            echo "! binary not found at $BIN_PATH"
+            ls -la "$(swift build -c release --show-bin-path)" 2>&1
+            exit 1
+          fi
+          ls -lh "$BIN_PATH"
           file "$BIN_PATH"
           echo "✓ Swift binary built"
 
       - name: Package Swift .app + DMG
         shell: bash
         run: |
+          set -e
           VERSION="1.1.0"
           PREBUILT_APP="build/Meilink.app"
           if [ ! -d "$PREBUILT_APP" ]; then
             echo "! build/Meilink.app missing (need pre-built bundle in repo)"
+            echo "Contents of build/:"
+            ls -la build/ 2>&1
             exit 1
           fi
+          echo "=== pre-built .app contents ==="
+          find "$PREBUILT_APP" -maxdepth 3 -type f
           # Inject fresh Swift binary into the pre-built .app bundle
           BIN_PATH="$(swift build -c release --show-bin-path)/Meilink"
           cp "$BIN_PATH" "$PREBUILT_APP/Contents/MacOS/Meilink"
+          echo "=== injected binary ==="
+          file "$PREBUILT_APP/Contents/MacOS/Meilink"
           # Bump version in plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
-            "$PREBUILT_APP/Contents/Info.plist" 2>/dev/null || true
+            "$PREBUILT_APP/Contents/Info.plist"
+          echo "=== plist after version bump ==="
+          /usr/libexec/PlistBuddy -c "Print" "$PREBUILT_APP/Contents/Info.plist"
           # Build DMG
           mkdir -p release
           STAGE="/tmp/dmg-staging-$"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
           cp -R "$PREBUILT_APP" "$STAGE/"
           ln -s /Applications "$STAGE/Applications"
+          echo "=== staging contents ==="
+          ls -la "$STAGE"
           hdiutil create -volname "Meilink" -srcfolder "$STAGE" \
-            -ov -fs HFS+ -format UDZO "release/meilink-${VERSION}-macOS-native.dmg" >/dev/null 2>&1
+            -ov -fs HFS+ -format UDZO "release/meilink-${VERSION}-macOS-native.dmg"
           rm -rf "$STAGE"
+          echo "=== final DMG ==="
+          ls -lh "release/meilink-${VERSION}-macOS-native.dmg"
           echo "✓ Swift native DMG built"
 
       - name: Upload artifacts
