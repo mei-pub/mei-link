@@ -57,8 +57,12 @@ class TunnelManager: ObservableObject {
 
         loadConfiguration()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            // Bind self to a local constant before entering the concurrent Task
+            // (Swift 5.10 release-mode concurrency checking rejects capturing
+            // optional self? in a concurrently-executing closure).
+            guard let self = self else { return }
             Task { @MainActor in
-                await self?.startIfNeeded()
+                await self.startIfNeeded()
             }
         }
     }
@@ -408,8 +412,12 @@ class TunnelManager: ObservableObject {
         lastReachabilityProbeAt = nil
         let pollingInterval = min(max(appSettings.statusPollingInterval, 3), 30)
         statusTimer = Timer.scheduledTimer(withTimeInterval: pollingInterval, repeats: true) { [weak self] _ in
+            // Bind self to a local constant before entering the concurrent Task
+            // to avoid "reference to captured var 'self' in concurrently-executing
+            // code" under Swift 5.10 release-mode concurrency checking.
+            guard let self = self else { return }
             Task { @MainActor in
-                await self?.pollStatus()
+                await self.pollStatus()
             }
         }
         Task { @MainActor in
