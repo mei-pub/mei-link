@@ -143,8 +143,15 @@ if [ ! -f "$NATIVE_DMG" ]; then
     if [ -d "$PREBUILT_APP" ]; then
         echo "  - rebuilding Swift binary via SwiftPM..."
         if swift build -c release >/dev/null 2>&1; then
-            cp "$ROOT_DIR/.build/release/Meilink" "$PREBUILT_APP/Contents/MacOS/Meilink"
-            echo "  ✓ Swift binary rebuilt and injected"
+            # Use --show-bin-path to find the release binary (SwiftPM puts it
+            # under .build/<arch>-apple-macosx/release on newer toolchains).
+            SWIFT_BIN_DIR="$(swift build -c release --show-bin-path 2>/dev/null)"
+            if [ -f "$SWIFT_BIN_DIR/Meilink" ]; then
+                cp "$SWIFT_BIN_DIR/Meilink" "$PREBUILT_APP/Contents/MacOS/Meilink"
+                echo "  ✓ Swift binary rebuilt and injected"
+            else
+                echo "  ! Swift binary not found at $SWIFT_BIN_DIR; using existing binary"
+            fi
         else
             echo "  ! swift build failed; using existing binary in pre-built bundle"
         fi

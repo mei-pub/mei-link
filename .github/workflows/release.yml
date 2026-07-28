@@ -66,7 +66,7 @@ jobs:
         run: bash Scripts/build-desktop.sh --copy
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: meilink-desktop-${{ matrix.label }}
           path: release/meilink-desktop-*
@@ -88,7 +88,15 @@ jobs:
       - name: Build Swift binary via SwiftPM
         shell: bash
         run: |
-          swift build -c release
+          echo "=== swift --version ==="
+          swift --version
+          echo "=== swift build -c release ==="
+          swift build -c release 2>&1 | tail -30
+          echo "=== locate binary ==="
+          BIN_PATH="$(swift build -c release --show-bin-path)/Meilink"
+          echo "binary at: $BIN_PATH"
+          ls -lh "$BIN_PATH" || { echo "! binary not found"; exit 1; }
+          file "$BIN_PATH"
           echo "✓ Swift binary built"
 
       - name: Package Swift .app + DMG
@@ -101,13 +109,14 @@ jobs:
             exit 1
           fi
           # Inject fresh Swift binary into the pre-built .app bundle
-          cp .build/release/Meilink "$PREBUILT_APP/Contents/MacOS/Meilink"
+          BIN_PATH="$(swift build -c release --show-bin-path)/Meilink"
+          cp "$BIN_PATH" "$PREBUILT_APP/Contents/MacOS/Meilink"
           # Bump version in plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
             "$PREBUILT_APP/Contents/Info.plist" 2>/dev/null || true
           # Build DMG
           mkdir -p release
-          STAGE="/tmp/dmg-staging-$$"
+          STAGE="/tmp/dmg-staging-$"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
           cp -R "$PREBUILT_APP" "$STAGE/"
           ln -s /Applications "$STAGE/Applications"
@@ -117,7 +126,7 @@ jobs:
           echo "✓ Swift native DMG built"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: meilink-swift-native
           path: release/meilink-1.1.0-macOS-native.dmg
@@ -153,7 +162,7 @@ jobs:
           done
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: meilink-server-setup
           path: release/meilink-setup-*
@@ -169,7 +178,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           path: artifacts
 
