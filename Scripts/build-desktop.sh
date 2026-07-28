@@ -65,7 +65,49 @@ echo ""
 
 # --- 3. Tauri build (Rust compile + bundle) ---
 echo ">>> Building Tauri app (this may take a few minutes)..."
-npx tauri build
+# Build the .app bundle only (no .dmg yet) so we can ad-hoc sign the .app
+# before wrapping it into a DMG. Tauri's default `tauri build` produces a DMG
+# from the unsigned .app and then cleans up the .app, leaving no chance to
+# inject a signature. Using `--bundles app` gives us the .app to sign.
+npx tauri build --bundles app
+echo ""
+
+# --- 3a. macOS: ad-hoc sign the .app to avoid Gatekeeper "damaged" error ---
+# Without code signing, macOS marks unsigned .app bundles downloaded from the
+# internet as "damaged and can't be opened" (com.apple.quarantine + no signature).
+# Ad-hoc signing (--sign -) doesn't give a Developer ID identity, but it makes
+# the bundle structurally valid so Gatekeeper shows "unidentified developer"
+# instead of "damaged" — users can then right-click → Open, or go to
+# System Settings → Privacy & Security → "Open Anyway".
+if [ "$GOOS" = "darwin" ]; then
+    APP_PATH="$DESKTOP_DIR/src-tauri/target/release/bundle/macos/Meilink.app"
+    if [ ! -d "$APP_PATH" ]; then
+        APP_PATH="$DESKTOP_DIR/src-tauri/target/release/Meilink.app"
+    fi
+    if [ -d "$APP_PATH" ]; then
+        echo ">>> Ad-hoc signing $APP_PATH ..."
+        codesign --force --deep --sign - "$APP_PATH" 2>&1 | tail -3
+        if codesign --verify --deep --strict "$APP_PATH" 2>/dev/null; then
+            echo "  ✓ ad-hoc signed"
+        else
+            echo "  ! ad-hoc signing verification failed (continuing anyway)"
+        fi
+        # Build the DMG ourselves from the signed .app.
+        SIGNED_DMG="$DESKTOP_DIR/src-tauri/target/release/bundle/dmg/Meilink_1.1.0_aarch64.dmg"
+        mkdir -p "$(dirname "$SIGNED_DMG")"
+        STAGE="/tmp/meilink-dmg-stage-$"
+        rm -rf "$STAGE" && mkdir -p "$STAGE"
+        cp -R "$APP_PATH" "$STAGE/"
+        ln -s /Applications "$STAGE/Applications"
+        rm -f "$SIGNED_DMG"
+        hdiutil create -volname "Meilink Desktop" -srcfolder "$STAGE" \
+            -ov -fs HFS+ -format UDZO "$SIGNED_DMG" >/dev/null 2>&1
+        rm -rf "$STAGE"
+        echo "  ✓ DMG built from signed .app: $(basename "$SIGNED_DMG")"
+    else
+        echo "  ! Meilink.app not found for ad-hoc signing"
+    fi
+fi
 echo ""
 
 # --- 4. Copy artifacts to release/ if requested ---
