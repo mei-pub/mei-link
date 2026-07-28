@@ -65,11 +65,17 @@ echo ""
 
 # --- 3. Tauri build (Rust compile + bundle) ---
 echo ">>> Building Tauri app (this may take a few minutes)..."
-# Build the .app bundle only (no .dmg yet) so we can ad-hoc sign the .app
-# before wrapping it into a DMG. Tauri's default `tauri build` produces a DMG
-# from the unsigned .app and then cleans up the .app, leaving no chance to
-# inject a signature. Using `--bundles app` gives us the .app to sign.
-npx tauri build --bundles app
+# On macOS, build the .app bundle only (no .dmg yet) so we can ad-hoc sign the
+# .app before wrapping it into a DMG. Tauri's default `tauri build` produces a
+# DMG from the unsigned .app and then cleans up the .app, leaving no chance to
+# inject a signature. `--bundles app` is macOS-only; on Windows/Linux we run
+# the default `tauri build` to produce the platform's installer format
+# (.msi/.nsis on Windows, .deb/.AppImage on Linux) directly.
+if [ "$GOOS" = "darwin" ]; then
+    npx tauri build --bundles app
+else
+    npx tauri build
+fi
 echo ""
 
 # --- 3a. macOS: ad-hoc sign the .app to avoid Gatekeeper "damaged" error ---
