@@ -12,13 +12,12 @@ Meilink 是一款基于 [frp](https://github.com/fatedier/frp) 的内网穿透�
 - 在 macOS 上以菜单栏常驻方式运行，不占 Dock，不打扰用户，关窗口不退出。
 - 提供 GUI、CLI、Tauri 桌面三种客户端，覆盖 macOS / Windows / Linux。
 
-## 2. 三种客户端形态
+## 2. 客户端形态
 
 | 形态 | 技术栈 | 平台 | 定位 |
 |---|---|---|---|
 | macOS 原生客户端 | Swift + AppKit/SwiftUI | macOS 13+ | 特色版本，菜单栏常驻、Keychain、Login Items |
 | 跨平台桌面客户端 | Tauri v2（Rust + Web 前端）+ Go sidecar | Windows / Linux / macOS | 推荐版本，交互与原生客户端对齐 |
-| 跨平台 CLI 客户端 | Go | Windows / Linux / macOS | 轻量备选，前台运行 + Web UI |
 
 SDD 的事实基线是 `Meilink/` 下的 Swift 实现。跨平台客户端必须与 Swift 实现在数据、状态、交互上对齐，详见 `docs/sdd/06-constraints.md` 的"跨平台兼容"一节。
 
@@ -43,12 +42,11 @@ SDD 的事实基线是 `Meilink/` 下的 Swift 实现。跨平台客户端必须
 - Go sidecar：复用 `cross-platform-client/internal/*` 的业务逻辑，通过本地 HTTP API 服务给前端
 - 与 macOS 原生客户端共享 `~/Library/Application Support/Meilink` 目录
 
-### 跨平台 CLI 客户端（`cross-platform-client/`）
+### 跨平台桌面客户端（`cross-platform-client/desktop/`）
 
-- Go 1.22+
-- 前台运行 + 内嵌 Web UI（HTML 模板）
-- 自动下载对应平台的 frpc 二进制
-- 支持 systemd / Windows Service 注册
+- Tauri v2（Rust 壳）+ Vite + 原生 HTML/CSS/ES modules 前端
+- Go sidecar：复用 `cross-platform-client/internal/*` 的业务逻辑，通过本地 HTTP API 服务给前端
+- 与 macOS 原生客户端共享 `~/Library/Application Support/Meilink` 目录
 
 ### 服务端
 
@@ -69,7 +67,7 @@ mei-link/
 │   ├── Utils/                   # AutoStart / Logger / Network / SubdomainNormalizer / AppIconProvider
 │   ├── Resources/               # 图标 PNG + frps.toml 示例
 │   └── Info.plist
-├── cross-platform-client/       # 跨平台 Go 客户端 + Tauri 桌面（详见该目录）
+├── cross-platform-client/       # 跨平台客户端（Tauri 桌面 + Go sidecar + setup 工具）
 ├── Scripts/                    # 构建与开发辅助脚本
 ├── docs/                        # 文档（sdd / agent-rules / superpowers）
 ├── Tests/                       # 空目录（保留给 SwiftPM）

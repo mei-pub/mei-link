@@ -4,13 +4,12 @@
 
 ## 1. 项目速览
 
-Meilink 是基于 [frp](https://github.com/fatedier/frp) 的内网穿透管理工具，三种客户端形态：
+Meilink 是基于 [frp](https://github.com/fatedier/frp) 的内网穿透管理工具，两种客户端形态 + 服务端部署工具：
 
 | 形态 | 路径 | 技术栈 | 平台 |
 |---|---|---|---|
 | macOS 原生客户端（特色版本） | `Meilink/` | Swift + AppKit/SwiftUI | macOS 13+ |
 | 跨平台桌面客户端（推荐） | `cross-platform-client/desktop/` | Tauri v2 + Go sidecar + Web 前端 | Win/Linux/macOS |
-| 跨平台 CLI 客户端（轻量备选） | `cross-platform-client/` | Go | Win/Linux/macOS |
 | 服务端部署工具 | `cross-platform-client/cmd/meilink-setup/` + `deploy-frps.sh` | Go + Shell | Linux |
 
 **事实基线**：macOS 原生 Swift 客户端（`Meilink/`）是行为、视觉、数据、状态、frpc 交互的 source of truth。跨平台客户端必须与 Swift 实现对齐。
@@ -156,7 +155,7 @@ mei-link/
 │   ├── UI/                     # Main / MenuBar / Settings / Setup 四组窗口
 │   ├── Utils/                  # AutoStart / Logger / Network / SubdomainNormalizer / AppIconProvider
 │   └── Resources/              # 图标 + frps.toml 示例
-├── cross-platform-client/      # 跨平台 Go 客户端 + Tauri 桌面（跳过，除非跨端任务）
+├── cross-platform-client/      # 跨平台客户端（Tauri 桌面 + Go sidecar + setup 工具，跳过除非跨端任务）
 ├── Scripts/                    # 构建脚本（build-all / build-desktop / download-frpc / gen-icons 等）
 ├── release/                    # 发布产物输出
 ├── build/                      # 本地构建暂存
