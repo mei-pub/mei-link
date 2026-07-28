@@ -43,7 +43,7 @@
         "url": "settings.html",
         "title": "设置",
         "width": 760,
-        "height": 460,
+        "height": 492,
         "visible": false,
         "backgroundColor": "#ffffff"
       },
@@ -52,7 +52,7 @@
         "url": "setup.html",
         "title": "首次配置",
         "width": 560,
-        "height": 640,
+        "height": 672,
         "resizable": false,
         "visible": false,
         "backgroundColor": "#ffffff"
@@ -62,9 +62,9 @@
         "url": "tunnel-edit.html",
         "title": "隧道",
         "width": 660,
-        "height": 440,
+        "height": 472,
         "minWidth": 600,
-        "minHeight": 380,
+        "minHeight": 412,
         "visible": false,
         "backgroundColor": "#ffffff"
       },

@@ -22,9 +22,9 @@ struct ApiUrl(Mutex<String>);
 /// created on demand to keep the startup lightweight.
 const WINDOW_SPECS: &[(&str, &str, f64, f64, bool)] = &[
     ("main", "Meilink", 1060.0, 820.0, true),
-	("settings", "设置", 760.0, 640.0, true),
-    ("setup", "首次配置", 560.0, 640.0, false),
-    ("tunnel-edit", "隧道", 660.0, 440.0, true),
+    ("settings", "设置", 760.0, 492.0, true),
+    ("setup", "首次配置", 560.0, 672.0, false),
+    ("tunnel-edit", "隧道", 660.0, 472.0, true),
     ("logs", "日志", 820.0, 620.0, true),
 ];
 
@@ -95,7 +95,7 @@ fn set_tray_icon_style(app: AppHandle, style: String) {
         if let Some(tray) = app.try_state::<TrayIconState>() {
             if let Some(tray) = tray.0.lock().unwrap().as_ref() {
                 let _ = tray.set_icon(Some(img));
-                let _ = tray.set_icon_as_template(true);
+                let _ = tray.set_icon_as_template(false);
             }
         }
     }
@@ -224,7 +224,7 @@ pub fn run() {
 
             let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(tray_icon)
-                .icon_as_template(true)
+                .icon_as_template(false)
                 .tooltip("Meilink")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -367,9 +367,9 @@ mod tests {
             WINDOW_SPECS,
             &[
                 ("main", "Meilink", 1060.0, 820.0, true),
-				("settings", "设置", 760.0, 640.0, true),
-                ("setup", "首次配置", 560.0, 640.0, false),
-                ("tunnel-edit", "隧道", 660.0, 440.0, true),
+                ("settings", "设置", 760.0, 492.0, true),
+                ("setup", "首次配置", 560.0, 672.0, false),
+                ("tunnel-edit", "隧道", 660.0, 472.0, true),
                 ("logs", "日志", 820.0, 620.0, true),
             ]
         );
@@ -397,9 +397,9 @@ mod tests {
 
         assert_eq!(size_for("popover"), (330, 440));
         assert_eq!(size_for("main"), (1060, 820));
-        assert_eq!(size_for("settings"), (760, 460));
-        assert_eq!(size_for("setup"), (560, 640));
-        assert_eq!(size_for("tunnel-edit"), (660, 440));
+        assert_eq!(size_for("settings"), (760, 492));
+        assert_eq!(size_for("setup"), (560, 672));
+        assert_eq!(size_for("tunnel-edit"), (660, 472));
         assert_eq!(size_for("logs"), (820, 620));
     }
 
