@@ -136,17 +136,18 @@ class FrpcProcess {
             process.interrupt()
             Thread.sleep(forTimeInterval: 0.5)
             if process.isRunning {
-            process.interrupt()
-            Thread.sleep(forTimeInterval: 0.5)
-            if process.isRunning {
-                let exitPid = pid ?? 0
-                logger.warning("frpc 进程未能退出，使用 kill -9 强制终止")
-                let task = Process()
-                task.executableURL = URL(fileURLWithPath: "/usr/bin/kill")
-                task.arguments = ["-9", "\(exitPid)"]
-                try? task.run()
-                task.waitUntilExit()
+                process.interrupt()
                 Thread.sleep(forTimeInterval: 0.5)
+                if process.isRunning {
+                    let exitPid = pid ?? 0
+                    logger.warning("frpc 进程未能退出，使用 kill -9 强制终止")
+                    let task = Process()
+                    task.executableURL = URL(fileURLWithPath: "/usr/bin/kill")
+                    task.arguments = ["-9", "\(exitPid)"]
+                    try? task.run()
+                    task.waitUntilExit()
+                    Thread.sleep(forTimeInterval: 0.5)
+                }
             }
         }
     }

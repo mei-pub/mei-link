@@ -133,8 +133,6 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-
-            }
         }
     }
 

@@ -96,6 +96,34 @@ struct Tunnel: Identifiable, Codable, Sendable {
         self.updatedAt = updatedAt
     }
 
+    /// 容错解码：跨平台 Go sidecar 写 tunnels.json 时不持久化运行期字段
+    /// （status / errorMessage / remoteAddr），Swift 默认 Codable 合成会因
+    /// `status` 缺失而整个解码失败 → loadTunnels() 返回空 → 主界面列表空。
+    /// 这里手动解码，运行期字段缺失时用默认值，和 AppSettings 的容错模式一致
+    /// （见 SDD 05-data-contract §2.1：运行期字段是 transient，由 pollStatus 覆盖）。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        type = try c.decode(TunnelType.self, forKey: .type)
+        localPort = try c.decode(Int.self, forKey: .localPort)
+        localIP = try c.decodeIfPresent(String.self, forKey: .localIP) ?? "127.0.0.1"
+        subdomain = try c.decodeIfPresent(String.self, forKey: .subdomain)
+        remotePort = try c.decodeIfPresent(Int.self, forKey: .remotePort)
+        customDomains = try c.decodeIfPresent([String].self, forKey: .customDomains) ?? []
+        httpUser = try c.decodeIfPresent(String.self, forKey: .httpUser)
+        httpPassword = try c.decodeIfPresent(String.self, forKey: .httpPassword)
+        hostHeaderRewrite = try c.decodeIfPresent(String.self, forKey: .hostHeaderRewrite)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        // Runtime fields — fall back to defaults when absent (not persisted by
+        // the Go sidecar). pollStatus / recoverConnection overwrites them.
+        status = try c.decodeIfPresent(TunnelStatus.self, forKey: .status) ?? .new
+        errorMessage = try c.decodeIfPresent(String.self, forKey: .errorMessage)
+        remoteAddr = try c.decodeIfPresent(String.self, forKey: .remoteAddr)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+    }
+
     func toProxyDefinition(serverConfig: ServerConfig? = nil) -> ProxyDefinition {
         let normalizedSubdomain = SubdomainNormalizer.normalize(
             subdomain,
