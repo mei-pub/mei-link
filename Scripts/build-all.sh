@@ -31,15 +31,18 @@ echo ""
 echo ">>> Building Tauri desktop client..."
 cd "$CLIENT_DIR/desktop"
 
-# Build frontend + Go sidecar + Rust shell, then copy the .app to release/.
+# build-desktop.sh --copy builds frontend + Go sidecar + Rust shell and copies
+# the platform-native installer (.dmg / .msi / .deb / .AppImage) to release/.
+# Run this script on each target platform (or use the GitHub Actions matrix in
+# .github/workflows/release.yml) to get all three platforms.
 if bash "$ROOT_DIR/Scripts/build-desktop.sh" --copy >/dev/null 2>&1; then
     echo "  ✓ Tauri app built"
 else
     echo "  ! Tauri build failed (see Scripts/build-desktop.sh output)"
 fi
+echo ""
 
-# Package the Tauri .app into a DMG with an Applications symlink for
-# drag-to-install parity with the native macOS client.
+# make_dmg: used by the Swift native fallback below to package build/Meilink.app.
 make_dmg() {
     local app_path="$1" dmg_path="$2" volname="${3:-Meilink}"
     local staging="$STAGE_DIR/dmg-staging-$"
@@ -52,14 +55,6 @@ make_dmg() {
         -ov -fs HFS+ -format UDZO "$dmg_path" >/dev/null 2>&1
     rm -rf "$staging"
 }
-
-DESKTOP_APP="$CLIENT_DIR/desktop/src-tauri/target/release/bundle/macos/Meilink.app"
-if [ -d "$DESKTOP_APP" ]; then
-    DESKTOP_DMG="$RELEASE_DIR/meilink-desktop-${VERSION}-darwin-arm64.dmg"
-    make_dmg "$DESKTOP_APP" "$DESKTOP_DMG" "Meilink Desktop"
-    echo "  -> $(basename "$DESKTOP_DMG")"
-fi
-echo ""
 
 # -----------------------------------------------------------------------------
 # 2. Server setup tool (Linux only: amd64 + arm64)

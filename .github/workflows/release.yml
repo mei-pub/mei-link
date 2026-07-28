@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号（如 1.1.0）"
+        required: true
+        default: "1.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  # -----------------------------------------------------------------------
+  # Job 1: Tauri 桌面客户端（macOS / Windows / Linux 并行）
+  # -----------------------------------------------------------------------
+  tauri-desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: darwin-arm64
+          - os: windows-latest
+            label: windows-amd64
+          - os: ubuntu-22.04
+            label: linux-amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Setup Rust (Tauri)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.label == 'darwin-arm64' && 'aarch64-apple-darwin' || matrix.label == 'windows-amd64' && 'x86_64-pc-windows-msvc' || 'x86_64-unknown-linux-gnu' }}
+
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      - name: Install frontend deps
+        working-directory: cross-platform-client/desktop
+        run: npm install
+
+      - name: Build Tauri desktop client
+        shell: bash
+        run: bash Scripts/build-desktop.sh --copy
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: meilink-desktop-${{ matrix.label }}
+          path: release/meilink-desktop-*
+
+  # -----------------------------------------------------------------------
+  # Job 2: Swift 原生客户端（仅 macOS）
+  # -----------------------------------------------------------------------
+  swift-native:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build Swift native DMG
+        shell: bash
+        run: |
+          # 只构建 Swift 原生 DMG，跳过 Tauri（Job 1 已构建）和 setup（Job 3 构建）
+          # 临时改造 build-all.sh 只跑 Swift 段
+          xcodegen generate
+          # 优先 Xcode 构建（macOS runner 有 Xcode）
+          xcodebuild -project Meilink.xcodeproj -scheme Meilink -configuration Release \
+            -derivedDataPath build/native -destination 'generic/platform=macOS' build
+          APP_PATH="$(find build/native -name 'Meilink.app' -type d | head -1)"
+          if [ -n "$APP_PATH" ]; then
+            mkdir -p release
+            # 打 DMG
+            STAGE="/tmp/dmg-staging"
+            rm -rf "$STAGE" && mkdir -p "$STAGE"
+            cp -R "$APP_PATH" "$STAGE/"
+            ln -s /Applications "$STAGE/Applications"
+            hdiutil create -volname "Meilink" -srcfolder "$STAGE" \
+              -ov -fs HFS+ -format UDZO "release/meilink-1.1.0-macOS-native.dmg" >/dev/null 2>&1
+            rm -rf "$STAGE"
+            echo "✓ Swift native DMG built"
+          else
+            echo "! Meilink.app not found"
+            exit 1
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: meilink-swift-native
+          path: release/meilink-1.1.0-macOS-native.dmg
+
+  # -----------------------------------------------------------------------
+  # Job 3: 服务端 setup 工具（Linux amd64 + arm64 交叉编译，任意平台可跑）
+  # -----------------------------------------------------------------------
+  server-setup:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build setup tool
+        shell: bash
+        run: |
+          cd cross-platform-client
+          VERSION="1.1.0"
+          mkdir -p "$GITHUB_WORKSPACE/release"
+          for goarch in amd64 arm64; do
+            outname="meilink-setup-${VERSION}-linux-${goarch}"
+            stagedir="/tmp/$outname"
+            rm -rf "$stagedir" && mkdir -p "$stagedir"
+            CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" \
+              go build -ldflags "-s -w" -o "$stagedir/meilink-setup" ./cmd/meilink-setup
+            tar -czf "$GITHUB_WORKSPACE/release/${outname}.tar.gz" -C /tmp "$outname"
+            echo "✓ ${outname}.tar.gz"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: meilink-server-setup
+          path: release/meilink-setup-*
+
+  # -----------------------------------------------------------------------
+  # Job 4: 汇总所有产物到 Release
+  # -----------------------------------------------------------------------
+  publish-release:
+    needs: [tauri-desktop, swift-native, server-setup]
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Organize release files
+        shell: bash
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
+          name: Meilink ${{ github.event.inputs.version || github.ref_name }}
+          generate_release_notes: true
+          files: release/*
