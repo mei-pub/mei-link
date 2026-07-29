@@ -4,14 +4,16 @@
 
 ## 1. 窗口规格
 
-| 窗口 | 视图 | 尺寸（W×H） | 最小尺寸 | styleMask | 标题 |
-|---|---|---|---|---|---|
-| 主窗口 | `MainWindow` | 1060×820 | minWidth 980, minHeight 740 | titled+closable+miniaturizable+resizable | `Meilink` |
-| 设置 | `SettingsView` | 760×460 | — | 同上 | `设置` |
-| 首次配置 | `SetupView` | 560×640 | — | 同上 | `首次配置` |
-| 隧道编辑 | `TunnelEditView` | 660×440 | — | 同上 | `添加新隧道` / `编辑隧道` |
-| 日志 | `LogWindowView` | 820×620 | minWidth 760, minHeight 560 | 同上 | `日志` |
-| 菜单栏面板 | `MenuBarView` | 330×440 | — | borderless + nonactivatingPanel | — |
+| 窗口 | 视图 | Swift 尺寸（内容区） | Tauri 尺寸（含标题栏） | 最小尺寸 | styleMask | 标题 |
+|---|---|---|---|---|---|---|
+| 主窗口 | `MainWindow` | 1060×820 | 1060×820 | minWidth 980, minHeight 740 | titled+closable+miniaturizable+resizable | `Meilink` |
+| 设置 | `SettingsView` | 760×460 | 760×737 | — | 同上 | `设置` |
+| 首次配置 | `SetupView` | 560×640 | 560×597 | — | 同上 | `首次配置` |
+| 隧道编辑 | `TunnelEditView` | 660×440 | 660×565 | minWidth 600, minHeight 505 | 同上 | `添加新隧道` / `编辑隧道` |
+| 日志 | `LogWindowView` | 820×620 | 820×620 | minWidth 760, minHeight 560 | 同上 | `日志` |
+| 菜单栏面板 | `MenuBarView` | 330×440 | 330×440 | — | borderless + nonactivatingPanel | — |
+
+> **Swift vs Tauri 尺寸差异**：Swift `NSWindow` 的 `contentRect` 是内容区高度，用 `fixedSize(horizontal: false, vertical: true)` 让窗口垂直自适应内容。Tauri 窗口 `height` 是总高度（含 macOS 标题栏 28px），且需手动设成内容实际需要的高度（Swift 自适应，Tauri 不自适应）。Tauri 尺寸 = 实际内容高度 + 标题栏 28px。
 
 引用：<kfile name="AppRuntime.swift" path="Meilink/App/AppRuntime.swift">AppRuntime.swift</kfile> 的 `AppWindowController`。
 

@@ -22,9 +22,9 @@ struct ApiUrl(Mutex<String>);
 /// created on demand to keep the startup lightweight.
 const WINDOW_SPECS: &[(&str, &str, f64, f64, bool)] = &[
     ("main", "Meilink", 1060.0, 820.0, true),
-    ("settings", "设置", 760.0, 492.0, true),
-    ("setup", "首次配置", 560.0, 672.0, false),
-    ("tunnel-edit", "隧道", 660.0, 472.0, true),
+    ("settings", "设置", 760.0, 737.0, true),
+    ("setup", "首次配置", 560.0, 597.0, false),
+    ("tunnel-edit", "隧道", 660.0, 565.0, true),
     ("logs", "日志", 820.0, 620.0, true),
 ];
 
@@ -367,9 +367,9 @@ mod tests {
             WINDOW_SPECS,
             &[
                 ("main", "Meilink", 1060.0, 820.0, true),
-                ("settings", "设置", 760.0, 492.0, true),
-                ("setup", "首次配置", 560.0, 672.0, false),
-                ("tunnel-edit", "隧道", 660.0, 472.0, true),
+                ("settings", "设置", 760.0, 737.0, true),
+                ("setup", "首次配置", 560.0, 597.0, false),
+                ("tunnel-edit", "隧道", 660.0, 565.0, true),
                 ("logs", "日志", 820.0, 620.0, true),
             ]
         );
@@ -397,9 +397,9 @@ mod tests {
 
         assert_eq!(size_for("popover"), (330, 440));
         assert_eq!(size_for("main"), (1060, 820));
-        assert_eq!(size_for("settings"), (760, 492));
-        assert_eq!(size_for("setup"), (560, 672));
-        assert_eq!(size_for("tunnel-edit"), (660, 472));
+        assert_eq!(size_for("settings"), (760, 737));
+        assert_eq!(size_for("setup"), (560, 597));
+        assert_eq!(size_for("tunnel-edit"), (660, 565));
         assert_eq!(size_for("logs"), (820, 620));
     }
 
