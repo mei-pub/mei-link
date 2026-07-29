@@ -43,16 +43,16 @@
       <h3>服务器配置</h3>
       <div class="form-group"><label>服务器地址</label>
         <div class="addr-row">
-          <input id="addr" class="form-input" placeholder="tunnel.example.com" style="max-width:200px">
-          <button class="btn btn-sm" id="testBtn" aria-label="测试连接" title="测试连接">测试连接</button>
-          <span id="testResult" style="font-size:11px"></span>
+          <input id="addr" class="form-input" placeholder="tunnel.example.com" style="flex:1;min-width:0">
+          <button class="btn btn-sm" id="testBtn" aria-label="测试连接" title="测试连接" style="flex-shrink:0;padding:5px 8px"></button>
+          <span id="testResult" style="font-size:11px;flex-shrink:0"></span>
         </div>
       </div>
       <div class="grid-2">
         <div class="form-group"><label>客户端端口</label><input id="port" class="form-input" type="number" value="7000"></div>
         <div class="form-group"><label>管理端口</label><input id="adminPort" class="form-input" type="number" value="7400"></div>
       </div>
-      <div class="form-group"><label>认证 Token</label><div style="display:flex;gap:4px;align-items:center"><input id="token" class="form-input" type="password" style="width:140px;max-width:140px;min-width:140px;flex:0 0 auto"><button class="btn btn-sm" id="tokenEye" aria-label="显示或隐藏 Token" title="显示或隐藏 Token" style="flex-shrink:0;padding:4px 6px"></button></div></div>
+      <div class="form-group"><label>认证 Token</label><div style="display:flex;gap:4px;align-items:center"><input id="token" class="form-input" type="password" style="flex:1;min-width:0"><button class="btn btn-sm" id="tokenEye" aria-label="显示或隐藏 Token" title="显示或隐藏 Token" style="flex-shrink:0;padding:5px 8px"></button></div></div>
       <div class="form-group"><label>子域名基域</label><input id="subdomain" class="form-input"></div>
       <div class="setting-row"><div><label>启用 TLS 连接</label><div class="desc">加密 frpc 到 frps 的控制连接，不等同于 HTTPS 隧道。</div></div><label class="toggle"><input type="checkbox" id="tls" checked><span class="slider"></span></label></div>
     </div>
@@ -62,14 +62,13 @@
       <div class="setting-row"><div><label>菜单栏图标</label><div class="desc">选择菜单栏图标的样式。</div></div></div>
       <div class="icon-grid" id="iconGrid"></div>
       <div class="setting-row" style="margin-top:6px"><div><label>远程探测间隔</label><div class="desc">降低外部端口探测频率。</div></div><div style="display:flex;align-items:center;gap:6px"><button class="btn btn-sm" id="probeDown" aria-label="减少远程探测间隔" title="减少远程探测间隔">−</button><span id="probeVal">60 秒</span><button class="btn btn-sm" id="probeUp" aria-label="增加远程探测间隔" title="增加远程探测间隔">+</button></div></div>
-      <div class="setting-row"><div><label>退出程序</label><div class="desc">完全退出 Meilink。</div></div><button class="btn btn-sm" id="quitBtn" aria-label="完全退出 Meilink" title="完全退出 Meilink" style="color:var(--danger)">完全退出</button></div>
     </div>
   </div>
   <div class="footer">
-    <button class="btn btn-primary btn-sm" id="saveBtn" aria-label="保存" title="保存">保存</button>
-    <button class="btn btn-primary btn-sm" id="saveRestartBtn" aria-label="保存并重启" title="保存并重启">保存并重启</button>
+    <button class="btn btn-sm" id="quitBtn" aria-label="完全退出 Meilink" title="完全退出 Meilink" style="color:var(--danger)">完全退出</button>
     <div class="spacer"></div>
-    <button class="btn btn-sm" id="closeBtn" aria-label="关闭" title="关闭">关闭</button>
+    <button class="btn btn-sm" id="cancelBtn" aria-label="取消" title="取消">取消</button>
+    <button class="btn btn-primary btn-sm" id="saveBtn" aria-label="保存" title="保存">保存</button>
   </div>
 </div>
 
@@ -108,19 +107,21 @@ iconGrid.querySelectorAll(".icon-option").forEach(el => {
 });
 
 document.getElementById("tokenEye").innerHTML = icons.eye;
+document.getElementById("testBtn").innerHTML = icons.network;
 document.getElementById("tokenEye").onclick = () => { const t = document.getElementById("token"); t.type = t.type === "password" ? "text" : "password"; };
 document.getElementById("testBtn").onclick = async () => {
   const addr = document.getElementById("addr").value.trim();
   const port = parseInt(document.getElementById("port").value) || 7000;
   if (!addr) return;
-  const btn = document.getElementById("testBtn"); btn.textContent = "测试中…"; btn.disabled = true;
+  const btn = document.getElementById("testBtn"); btn.disabled = true;
   const result = document.getElementById("testResult");
   try {
     const r = await api.testConnection(addr, port);
-    if (r.ok) { result.innerHTML = '<span style="color:var(--success)">连接成功</span>'; }
-    else { result.innerHTML = '<span style="color:var(--danger)">连接失败: ' + esc(r.err || "") + '</span>'; }
-  } catch(e) { result.innerHTML = '<span style="color:var(--danger)">连接失败: ' + esc(e.message) + '</span>'; }
-  btn.textContent = "测试连接"; btn.disabled = false;
+    if (r.ok) { result.innerHTML = '<span style="color:var(--success)">✓ 连接成功</span>'; }
+    else { result.innerHTML = '<span style="color:var(--danger)">✗ ' + esc(r.err || "") + '</span>'; }
+  } catch(e) { result.innerHTML = '<span style="color:var(--danger)">✗ ' + esc(e.message) + '</span>'; }
+  btn.disabled = false;
+  setTimeout(() => { result.innerHTML = ""; }, 4000);
 };
 document.getElementById("probeDown").onclick = () => { probeInterval = Math.max(30, probeInterval - 15); document.getElementById("probeVal").textContent = `${probeInterval} 秒`; };
 document.getElementById("probeUp").onclick = () => { probeInterval = Math.min(600, probeInterval + 15); document.getElementById("probeVal").textContent = `${probeInterval} 秒`; };
@@ -134,13 +135,17 @@ document.getElementById("autostartToggle").onchange = async (e) => {
   }
 };
 document.getElementById("quitBtn").onclick = () => { quitApp(); };
-document.getElementById("saveBtn").onclick = () => save(false);
-document.getElementById("saveRestartBtn").onclick = () => save(true);
-document.getElementById("closeBtn").onclick = () => closeWindow();
+document.getElementById("cancelBtn").onclick = () => closeWindow();
+document.getElementById("saveBtn").onclick = async () => {
+  // Confirm restart: Swift SettingsView 用 confirmationDialog 让用户选
+  // "仅保存" 还是 "保存并重启"。这里用浏览器 confirm 替代。
+  const shouldRestart = confirm("保存后是否立即重启 frpc 隧道？\n\n点击「确定」保存并重启，点击「取消」仅保存不重启。");
+  await save(shouldRestart);
+};
 document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
-    save(e.shiftKey);
+    save(false);
   } else if (e.key === "Enter" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName || "")) {
     e.preventDefault();
     save(false);
