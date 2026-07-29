@@ -74,7 +74,7 @@
 </div>
 
 <script type="module">
-import { api, openWindow, quitApp, closeWindow, setTrayIconStyle } from "./lib/api.js";
+import { api, openWindow, quitApp, closeWindow, setTrayIconStyle, esc } from "./lib/api.js";
 import { icons } from "./lib/icons.js";
 
 const ICON_NAMES = ["portal", "topology", "arrowRing", "waveform", "relay"];
@@ -193,12 +193,20 @@ async function save(restart) {
 }
 
 async function refresh() {
+  // Each section loads independently so a failure in one (e.g. autostart
+  // endpoint missing on older sidecar) doesn't prevent the others from
+  // filling in. This matches the Swift SettingsView behavior where each
+  // settingsRow is independent.
   try {
-    const [status, cfg, settings] = await Promise.all([
-      api.getStatus(), api.getServerConfig().catch(()=>null), api.getSettings()
-    ]);
-    document.getElementById("hdrStatus").textContent = status.connected ? "已连接" : status.running ? "连接中" : status.configured ? "未连接" : "未配置";
-    document.getElementById("hdrDot").className = "status-dot " + (status.connected?"running":status.running?"connecting":"stopped");
+    const status = await api.getStatus().catch(() => null);
+    if (status) {
+      document.getElementById("hdrStatus").textContent = status.connected ? "已连接" : status.running ? "连接中" : status.configured ? "未连接" : "未配置";
+      document.getElementById("hdrDot").className = "status-dot " + (status.connected?"running":status.running?"connecting":"stopped");
+    }
+  } catch(e) { console.error("status load failed:", e); }
+
+  try {
+    const cfg = await api.getServerConfig().catch(() => null);
     if (cfg) {
       document.getElementById("addr").value = cfg.serverAddr || "";
       document.getElementById("port").value = cfg.serverPort || 7000;
@@ -208,6 +216,10 @@ async function refresh() {
       document.getElementById("tls").checked = cfg.tlsEnabled !== false;
       document.getElementById("settingsSub").textContent = `${cfg.serverAddr}:${cfg.serverPort} · ${cfg.subDomainHost||""}`;
     }
+  } catch(e) { console.error("server config load failed:", e); }
+
+  try {
+    const settings = await api.getSettings().catch(() => null);
     if (settings) {
       probeInterval = settings.remoteReachabilityInterval || 60;
       document.getElementById("probeVal").textContent = `${probeInterval} 秒`;
@@ -218,20 +230,21 @@ async function refresh() {
         });
       }
     }
-    try {
-      const auto = await api.getAutostart();
-      const toggle = document.getElementById("autostartToggle");
-      const desc = document.getElementById("autostartDesc");
-      toggle.checked = !!auto.enabled;
-      if (!auto.available) {
-        toggle.disabled = true;
-        desc.textContent = "当前平台不支持开机自启动。";
-      } else {
-        toggle.disabled = false;
-        desc.textContent = "登录系统后自动启动 Meilink。";
-      }
-    } catch(e) { /* autostart endpoint may be missing on older sidecar */ }
-  } catch(e) { console.error(e); }
+  } catch(e) { console.error("settings load failed:", e); }
+
+  try {
+    const auto = await api.getAutostart();
+    const toggle = document.getElementById("autostartToggle");
+    const desc = document.getElementById("autostartDesc");
+    toggle.checked = !!auto.enabled;
+    if (!auto.available) {
+      toggle.disabled = true;
+      desc.textContent = "当前平台不支持开机自启动。";
+    } else {
+      toggle.disabled = false;
+      desc.textContent = "登录系统后自动启动 Meilink。";
+    }
+  } catch(e) { console.error("autostart load failed:", e); }
 }
 refresh();
 </script>
