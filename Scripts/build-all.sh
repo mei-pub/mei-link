@@ -43,6 +43,9 @@ fi
 echo ""
 
 # make_dmg: used by the Swift native fallback below to package build/Meilink.app.
+# Every macOS DMG includes a one-click fix script for Gatekeeper "damaged /
+# can't be opened" errors — double-clicking the .command clears quarantine
+# via `sudo xattr -cr`.
 make_dmg() {
     local app_path="$1" dmg_path="$2" volname="${3:-Meilink}"
     local staging="$STAGE_DIR/dmg-staging-$"
@@ -50,6 +53,42 @@ make_dmg() {
     mkdir -p "$staging"
     cp -R "$app_path" "$staging/"
     ln -s /Applications "$staging/Applications"
+    # One-click fix for Gatekeeper "damaged" error. Filename is Chinese so
+    # users immediately know what it does.
+    cat > "$staging/修复签名-打不开点我.command" <<'COMMAND_EOF'
+#!/bin/bash
+# Meilink 签名修复脚本
+# 解决「已损坏，无法打开」或「无法验证开发者」错误
+# 双击此文件运行，输入开机密码即可
+
+set -e
+echo "============================================"
+echo "  Meilink 签名修复工具"
+echo "============================================"
+echo ""
+echo "此脚本会清除 Meilink.app 的 quarantine 属性，"
+echo "解决 macOS 提示「已损坏，无法打开」的问题。"
+echo ""
+
+APP_PATH="/Applications/Meilink.app"
+if [ ! -d "$APP_PATH" ]; then
+    echo "❌ 未找到 $APP_PATH"
+    echo "请先拖动 Meilink.app 到 Applications 文件夹安装。"
+    echo ""
+    read -p "按回车键退出..."
+    exit 1
+fi
+
+echo "即将执行: sudo xattr -cr /Applications/Meilink.app"
+echo "（需要输入开机密码，输入时不会显示字符，输完按回车）"
+echo ""
+sudo xattr -cr "$APP_PATH"
+echo ""
+echo "✅ 修复完成！现在可以打开 Meilink 了。"
+echo ""
+read -p "按回车键退出..."
+COMMAND_EOF
+    chmod +x "$staging/修复签名-打不开点我.command"
     rm -f "$dmg_path"
     hdiutil create -volname "$volname" -srcfolder "$staging" \
         -ov -fs HFS+ -format UDZO "$dmg_path" >/dev/null 2>&1

@@ -105,6 +105,45 @@ if [ "$GOOS" = "darwin" ]; then
         rm -rf "$STAGE" && mkdir -p "$STAGE"
         cp -R "$APP_PATH" "$STAGE/"
         ln -s /Applications "$STAGE/Applications"
+        # Add a one-click fix script for the Gatekeeper "damaged / can't be
+        # opened" error. Ad-hoc signing + quarantine still makes macOS block
+        # the app on first launch; users can double-click this .command to run
+        # `sudo xattr -cr` and clear the quarantine attribute. The filename is
+        # intentionally Chinese so users immediately know what it does.
+        cat > "$STAGE/修复签名-打不开点我.command" <<'COMMAND_EOF'
+#!/bin/bash
+# Meilink 签名修复脚本
+# 解决「已损坏，无法打开」或「无法验证开发者」错误
+# 双击此文件运行，输入开机密码即可
+
+set -e
+echo "============================================"
+echo "  Meilink 签名修复工具"
+echo "============================================"
+echo ""
+echo "此脚本会清除 Meilink.app 的 quarantine 属性，"
+echo "解决 macOS 提示「已损坏，无法打开」的问题。"
+echo ""
+
+APP_PATH="/Applications/Meilink.app"
+if [ ! -d "$APP_PATH" ]; then
+    echo "❌ 未找到 $APP_PATH"
+    echo "请先拖动 Meilink.app 到 Applications 文件夹安装。"
+    echo ""
+    read -p "按回车键退出..."
+    exit 1
+fi
+
+echo "即将执行: sudo xattr -cr /Applications/Meilink.app"
+echo "（需要输入开机密码，输入时不会显示字符，输完按回车）"
+echo ""
+sudo xattr -cr "$APP_PATH"
+echo ""
+echo "✅ 修复完成！现在可以打开 Meilink 了。"
+echo ""
+read -p "按回车键退出..."
+COMMAND_EOF
+        chmod +x "$STAGE/修复签名-打不开点我.command"
         rm -f "$SIGNED_DMG"
         hdiutil create -volname "Meilink Desktop" -srcfolder "$STAGE" \
             -ov -fs HFS+ -format UDZO "$SIGNED_DMG" >/dev/null 2>&1
