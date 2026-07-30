@@ -116,8 +116,16 @@ async function req(path, options) {
     const text = await res.text();
     throw new Error(text || res.statusText);
   }
+  // 204 No Content / 201 Created with empty body: don't try to parse JSON.
+  // POST/PUT/DELETE typically return no body; parsing an empty body throws
+  // "Unexpected end of JSON input" (or "string did not match the expected
+  // pattern" in Tauri's webview), which masks the actual success.
+  if (res.status === 204) return null;
   const ct = res.headers.get("content-type") || "";
-  return ct.includes("json") ? res.json() : null;
+  if (!ct.includes("json")) return null;
+  const text = await res.text();
+  if (!text) return null;
+  return JSON.parse(text);
 }
 
 export const api = {
@@ -197,6 +205,53 @@ export function quitApp() {
 /** Update the tray icon style (appIcon/link/text). */
 export function setTrayIconStyle(style) {
   return _invoke("set_tray_icon_style", { style });
+}
+
+/**
+ * Resize a window to fit its content. Pass the window label and the measured
+ * content height (document.body.scrollHeight or similar). The Rust side adds
+ * the macOS title bar height and applies the new size.
+ *
+ * This mirrors Swift's `fixedSize(horizontal: false, vertical: true)` for
+ * windows whose content height isn't known until runtime (settings, tunnel
+ * edit, setup).
+ */
+export function fitWindowToContent(label, height) {
+  return _invoke("fit_window_to_content", { label, height });
+}
+
+/**
+ * Measure the real content height of a window and resize the window to fit.
+ *
+ * Tauri windows have `height: 100vh; overflow: hidden` in CSS so the page
+ * never reports a scrollHeight larger than the viewport. To get the real
+ * content height we temporarily relax the constraints, measure, then restore
+ * them. The label defaults to the current window (from the URL).
+ *
+ * Call this after the page has rendered its content (e.g. in a
+ * requestAnimationFrame after refresh()).
+ */
+export async function autoFitWindow(label) {
+  // In a plain browser (dev), there's no Tauri to invoke — skip gracefully.
+  if (!hasTauriInternals()) return;
+  // Derive the window label from the URL (settings.html → "settings", etc.)
+  const derived = label || window.location.pathname.replace(/\.html$/, "").replace(/^\//, "");
+  const app = document.querySelector(".app") || document.body;
+  const prevHeight = app.style.height;
+  const prevOverflow = app.style.overflow;
+  app.style.height = "auto";
+  app.style.overflow = "visible";
+  // Let the browser reflow with the relaxed constraints.
+  await new Promise((r) => requestAnimationFrame(r));
+  const contentHeight = Math.max(
+    app.scrollHeight,
+    app.getBoundingClientRect().height
+  );
+  app.style.height = prevHeight;
+  app.style.overflow = prevOverflow;
+  try {
+    await fitWindowToContent(derived, contentHeight);
+  } catch (e) { /* not in tauri context */ }
 }
 
 /** Hide the current window. */

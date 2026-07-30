@@ -98,7 +98,8 @@
 </div>
 
 <script type="module">
-import { api, closeWindow } from "./lib/api.js";
+import { api, closeWindow, autoFitWindow } from "./lib/api.js";
+import { customAlert } from "./lib/dialog.js";
 let selectedType = "http"; let editId = null;
 document.getElementById("cancelBtn").onclick = () => closeWindow();
 function selectType(type) {
@@ -109,17 +110,18 @@ function selectType(type) {
   document.getElementById("remotePortGroup").style.display = isHttp ? "none" : "block";
   document.getElementById("formHint").textContent = isHttp ? "通过子域名发布本机 HTTP 服务" : "通过远程端口转发本机 TCP/UDP 服务";
 }
-document.querySelectorAll(".type-segments button").forEach(b => b.onclick = () => selectType(b.dataset.type));
+document.querySelectorAll(".type-segments button").forEach(b => b.onclick = () => { selectType(b.dataset.type); autoFitWindow(); });
 selectType("http");
+autoFitWindow();
 document.getElementById("saveBtn").onclick = async () => {
   const name = document.getElementById("name").value.trim(); const localPort = parseInt(document.getElementById("localPort").value);
-  if (!name || !localPort) { alert("请填写名称和本地端口"); return; }
+  if (!name || !localPort) { await customAlert("请填写名称和本地端口"); return; }
   const tunnel = { name, type: selectedType, localIP: document.getElementById("localIP").value || "127.0.0.1", localPort, remotePort: parseInt(document.getElementById("remotePort").value) || 0, subdomain: document.getElementById("subdomain").value.trim(), enabled: document.getElementById("enabled").checked };
-  try { if (editId) { tunnel.id = editId; await api.updateTunnel(tunnel); } else { await api.addTunnel(tunnel); } closeWindow(); } catch(e) { alert("保存失败: " + e.message); }
+  try { if (editId) { tunnel.id = editId; await api.updateTunnel(tunnel); } else { await api.addTunnel(tunnel); } closeWindow(); } catch(e) { await customAlert("保存失败: " + e.message); }
 };
 const editTunnelId = sessionStorage.getItem("editTunnelId");
 if (editTunnelId) { sessionStorage.removeItem("editTunnelId"); editId = editTunnelId; document.getElementById("formTitle").textContent = "编辑隧道"; document.getElementById("saveBtn").textContent = "保存"; document.getElementById("saveBtn").setAttribute("aria-label", "保存"); document.getElementById("saveBtn").title = "保存";
-  api.getTunnels().then(tunnels => { const t = tunnels.find(x => x.id === editId); if (!t) return; document.getElementById("name").value = t.name; document.getElementById("localPort").value = t.localPort; document.getElementById("localIP").value = t.localIP || "127.0.0.1"; document.getElementById("remotePort").value = t.remotePort || ""; document.getElementById("subdomain").value = t.subdomain || ""; document.getElementById("enabled").checked = t.enabled; selectType(t.type); });
+  api.getTunnels().then(tunnels => { const t = tunnels.find(x => x.id === editId); if (!t) return; document.getElementById("name").value = t.name; document.getElementById("localPort").value = t.localPort; document.getElementById("localIP").value = t.localIP || "127.0.0.1"; document.getElementById("remotePort").value = t.remotePort || ""; document.getElementById("subdomain").value = t.subdomain || ""; document.getElementById("enabled").checked = t.enabled; selectType(t.type); autoFitWindow(); });
 }
 </script>
 </body>

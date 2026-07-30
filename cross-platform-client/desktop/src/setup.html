@@ -52,8 +52,9 @@
 </div>
 
 <script type="module">
-import { api, closeWindow, esc } from "./lib/api.js";
+import { api, closeWindow, esc, autoFitWindow } from "./lib/api.js";
 import { icons } from "./lib/icons.js";
+import { customAlert } from "./lib/dialog.js";
 
 document.getElementById("cancelBtn").onclick = () => closeWindow();
 document.getElementById("subdomain").addEventListener("input", (e) => { document.getElementById("dnsHost").textContent = e.target.value || "tunnel.example.com"; });
@@ -74,7 +75,7 @@ document.getElementById("testBtn").onclick = async () => {
 document.getElementById("saveBtn").onclick = async () => {
   const addr = document.getElementById("addr").value.trim(); const port = parseInt(document.getElementById("port").value) || 7000;
   const token = document.getElementById("token").value.trim(); const subdomain = document.getElementById("subdomain").value.trim();
-  if (!addr || !token || !subdomain) { alert("请填写所有字段"); return; }
+  if (!addr || !token || !subdomain) { customAlert("请填写所有字段"); return; }
   await api.saveServerConfig({ serverAddr: addr, serverPort: port, authToken: token, subDomainHost: subdomain, tlsEnabled: document.getElementById("tls").checked, adminPort: 7400, adminUser: "admin", adminPassword: "admin" });
   try { await api.start(); } catch(e) {}
   closeWindow();
@@ -87,7 +88,7 @@ api.getServerConfig().then(c => {
     document.getElementById("tls").checked = c.tlsEnabled !== false;
     document.getElementById("dnsHost").textContent = c.subDomainHost || "tunnel.example.com";
   }
-}).catch(()=>{});
+}).catch(()=>{}).finally(() => autoFitWindow());
 </script>
 </body>
 </html>

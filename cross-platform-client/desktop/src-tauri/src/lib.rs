@@ -65,6 +65,34 @@ fn get_api_url(state: tauri::State<ApiUrl>) -> String {
     state.0.lock().unwrap().clone()
 }
 
+/// Resize a window to fit its content. Tauri windows have a fixed height
+/// set in tauri.conf.json, but content may need more or less space. The
+/// frontend measures the actual content height (document.body.scrollHeight)
+/// and calls this to apply it. Matches Swift's `fixedSize(horizontal: false,
+/// vertical: true)` behavior where the window vertically auto-fits content.
+///
+/// `height` is the desired content height in CSS pixels; the command adds
+/// the platform title bar height on macOS so the total window height is
+/// content + chrome.
+#[tauri::command]
+fn fit_window_to_content(app: AppHandle, label: String, height: f64) {
+    if let Some(window) = app.get_webview_window(&label) {
+        let scale = window.scale_factor().unwrap_or(1.0);
+        // macOS title bar is ~28px in physical pixels; on other platforms the
+        // window chrome differs but the webview already reports content size.
+        #[cfg(target_os = "macos")]
+        let chrome_height = 28.0;
+        #[cfg(not(target_os = "macos"))]
+        let chrome_height = 0.0;
+        let total_physical = (height + chrome_height) * scale;
+        let size = tauri::PhysicalSize {
+            width: window.outer_size().unwrap_or_default().width,
+            height: total_physical as u32,
+        };
+        let _ = window.set_size(size);
+    }
+}
+
 /// Quit the entire app: stop frpc via sidecar, kill sidecar, then exit.
 #[tauri::command]
 fn quit_app(app: AppHandle, state: tauri::State<SidecarState>) {
@@ -95,7 +123,7 @@ fn set_tray_icon_style(app: AppHandle, style: String) {
         if let Some(tray) = app.try_state::<TrayIconState>() {
             if let Some(tray) = tray.0.lock().unwrap().as_ref() {
                 let _ = tray.set_icon(Some(img));
-                let _ = tray.set_icon_as_template(false);
+                let _ = tray.set_icon_as_template(true);
             }
         }
     }
@@ -219,12 +247,23 @@ pub fn run() {
             let initial_style = saved_menu_bar_icon_style();
             let initial_icon = tray_icon_bytes_for_style(&initial_style)
                 .unwrap_or(include_bytes!("../icons/tray-portal.png"));
-            let tray_icon = tauri::image::Image::from_bytes(initial_icon)
-                .unwrap_or_else(|_| app.default_window_icon().unwrap().clone());
+            let tray_icon = match tauri::image::Image::from_bytes(initial_icon) {
+                Ok(img) => img,
+                Err(e) => {
+                    eprintln!("! Failed to load tray icon from bytes: {e}. Falling back to default window icon.");
+                    app.default_window_icon()
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            eprintln!("! No default window icon either; tray will have no icon.");
+                            // An empty 1x1 transparent image so the tray builder doesn't fail.
+                            tauri::image::Image::new(&[], 1, 1)
+                        })
+                }
+            };
 
             let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(tray_icon)
-                .icon_as_template(false)
+                .icon_as_template(true)
                 .tooltip("Meilink")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -333,6 +372,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_window,
             get_api_url,
+            fit_window_to_content,
             quit_app,
             set_tray_icon_style
         ])

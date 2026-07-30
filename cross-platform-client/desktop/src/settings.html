@@ -73,8 +73,9 @@
 </div>
 
 <script type="module">
-import { api, openWindow, quitApp, closeWindow, setTrayIconStyle, esc } from "./lib/api.js";
+import { api, openWindow, quitApp, closeWindow, setTrayIconStyle, esc, autoFitWindow } from "./lib/api.js";
 import { icons } from "./lib/icons.js";
+import { customAlert, customConfirm } from "./lib/dialog.js";
 
 const ICON_NAMES = ["portal", "topology", "arrowRing", "waveform", "relay"];
 const ICON_LABELS = ["门户", "拓扑", "穿透", "信号", "中继"];
@@ -101,7 +102,7 @@ iconGrid.querySelectorAll(".icon-option").forEach(el => {
       await api.saveSettings({ ...current, menuBarIconStyle: selectedIcon, remoteReachabilityInterval: probeInterval, autoStart: true, showInDock: false });
       await setTrayIconStyle(selectedIcon);
     } catch(e) {
-      alert("切换菜单栏图标失败: " + e.message);
+      customAlert("切换菜单栏图标失败: " + e.message);
     }
   };
 });
@@ -130,16 +131,20 @@ document.getElementById("autostartToggle").onchange = async (e) => {
   try {
     await api.setAutostart(enabled);
   } catch(err) {
-    alert("设置自启动失败: " + (err.message || err));
+    customAlert("设置自启动失败: " + (err.message || err));
     e.target.checked = !enabled;
   }
 };
 document.getElementById("quitBtn").onclick = () => { quitApp(); };
 document.getElementById("cancelBtn").onclick = () => closeWindow();
 document.getElementById("saveBtn").onclick = async () => {
-  // Confirm restart: Swift SettingsView 用 confirmationDialog 让用户选
-  // "仅保存" 还是 "保存并重启"。这里用浏览器 confirm 替代。
-  const shouldRestart = confirm("保存后是否立即重启 frpc 隧道？\n\n点击「确定」保存并重启，点击「取消」仅保存不重启。");
+  // Swift SettingsView 用 confirmationDialog 让用户选"仅保存"还是"保存并重启"。
+  // Tauri webview 不支持浏览器原生 confirm()，用自定义 HTML 弹窗替代。
+  const shouldRestart = await customConfirm(
+    "保存后是否立即重启 frpc 隧道？",
+    "点击「保存并重启」立即应用配置并重启隧道；点击「仅保存」则保留配置，下次手动连接时生效。",
+    { confirmText: "保存并重启", cancelText: "仅保存" }
+  );
   await save(shouldRestart);
 };
 document.addEventListener("keydown", (e) => {
@@ -159,11 +164,10 @@ async function save(restart) {
   const adminPort = parseInt(document.getElementById("adminPort").value) || 7400;
   const token = document.getElementById("token").value;
   const subdomain = document.getElementById("subdomain").value.trim();
-  if (!addr || !token || !subdomain) { alert("请填写所有字段"); return; }
+  if (!addr || !token || !subdomain) { await customAlert("请填写所有字段"); return; }
   saveBusy = true;
   const saveBtn = document.getElementById("saveBtn");
-  const saveRestartBtn = document.getElementById("saveRestartBtn");
-  saveBtn.disabled = true; saveRestartBtn.disabled = true;
+  saveBtn.disabled = true;
   saveBtn.textContent = "保存中...";
   try {
     await api.saveServerConfig({
@@ -189,10 +193,10 @@ async function save(restart) {
     }
     closeWindow();
   } catch(e) {
-    alert("保存设置失败: " + e.message);
+    await customAlert("保存设置失败: " + e.message);
   } finally {
     saveBusy = false;
-    saveBtn.disabled = false; saveRestartBtn.disabled = false;
+    saveBtn.disabled = false;
     saveBtn.textContent = "保存";
   }
 }
@@ -251,7 +255,7 @@ async function refresh() {
     }
   } catch(e) { console.error("autostart load failed:", e); }
 }
-refresh();
+refresh().then(() => autoFitWindow());
 </script>
 </body>
 </html>

@@ -78,6 +78,7 @@
 <script type="module">
 import { api, openWindow, closeWindow, openUrl, copyText, overallStatus, routeText, canOpen, STATUS_LABELS, esc, tunnelStatus } from "./lib/api.js";
 import { icons } from "./lib/icons.js";
+import { customAlert, customConfirm } from "./lib/dialog.js";
 
 document.getElementById("appLogo").innerHTML = '<img src="/icons/app-icon.png" width="36" height="36" style="border-radius:8px;object-fit:contain">';
 document.getElementById("connBtn").innerHTML = icons.play + " 连接";
@@ -97,7 +98,7 @@ document.getElementById("connBtn").onclick = async () => {
     btn.innerHTML = s.running ? icons.stop + " 断开中..." : icons.play + " 连接中...";
     if (s.running) await api.stop(); else await api.start();
   } catch(e) {
-    alert("连接控制失败: " + e.message);
+    customAlert("连接控制失败: " + e.message);
   } finally {
     btn.disabled = false;
     refresh();
@@ -110,7 +111,7 @@ document.getElementById("restartBtn").onclick = async () => {
   try {
     await api.restart();
   } catch(e) {
-    alert("重启失败: " + e.message);
+    customAlert("重启失败: " + e.message);
   } finally {
     btn.disabled = false;
     btn.innerHTML = icons.restart + " 重启";
@@ -182,7 +183,7 @@ function showMenu(id, container) {
   dd.innerHTML = `<div class="dropdown-item" data-edit="${id}">${icons.settings} 编辑</div><div class="dropdown-item danger" data-del="${id}">${icons.trash} 删除</div>`;
   container.appendChild(dd);
   dd.querySelector("[data-edit]").onclick = () => { sessionStorage.setItem("editTunnelId", id); openWindow("tunnel-edit"); dd.remove(); };
-  dd.querySelector("[data-del]").onclick = async () => { if (confirm("确定删除此隧道？")) { await api.deleteTunnel(id); refresh(); } dd.remove(); };
+  dd.querySelector("[data-del]").onclick = async () => { if (await customConfirm("删除隧道", "确定删除此隧道？删除后无法恢复。", { confirmText: "删除", danger: true })) { await api.deleteTunnel(id); refresh(); } dd.remove(); };
 }
 document.addEventListener("click", () => { const d = document.querySelector(".dropdown.show"); if (d) d.remove(); });
 
