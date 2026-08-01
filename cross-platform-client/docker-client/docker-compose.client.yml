@@ -1,0 +1,9 @@
+services:
+  meilink-client:
+    build: .
+    ports: ["${MEILINK_WEB_PORT:-17420}:17420"]
+    environment:
+      MEILINK_ADMIN_USER: ${MEILINK_ADMIN_USER:-admin}
+      MEILINK_ADMIN_PASSWORD: ${MEILINK_ADMIN_PASSWORD:?set a strong password}
+    volumes: ["./data:/data"]
+    restart: unless-stopped
