@@ -4,7 +4,8 @@ export type RouteConfig = { subDomainHost?: string; serverAddr?: string };
 export function routeText(tunnel: RouteTunnel, config: RouteConfig): string {
   if (tunnel.type === "http" || tunnel.type === "https") {
     const host = tunnel.remoteAddr || fullHost(tunnel.subdomain, config.subDomainHost);
-    return host ? `${tunnel.type}://${host}` : "";
+    if (!host) return "";
+    return /^https?:\/\//i.test(host) ? host : `${tunnel.type}://${host}`;
   }
   return tunnel.remoteAddr || (tunnel.remotePort ? `${config.serverAddr || ""}:${tunnel.remotePort}` : "");
 }

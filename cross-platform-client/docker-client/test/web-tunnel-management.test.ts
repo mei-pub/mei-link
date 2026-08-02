@@ -18,4 +18,10 @@ test("web UI provides an accessible tunnel edit dialog and per-tunnel actions", 
   assert.match(script, /navigator\.clipboard\.writeText/);
   assert.match(script, /\/api\/tunnels\/\$\{encodeURIComponent\(tunnel\.id\)\}\/toggle/);
   assert.match(script, /const field = \(form, name\) => form\.elements\.namedItem\(name\)/);
+  assert.match(html, /data-view="tunnels"/);
+  assert.match(html, /data-view="settings"/);
+  assert.match(html, /data-view="logs"/);
+  assert.match(html, /role="switch"/);
+  assert.match(html, /id="testConnectionButton"/);
+  assert.match(script, /<svg/);
 });

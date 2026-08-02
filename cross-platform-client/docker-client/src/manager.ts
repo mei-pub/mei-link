@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { connect } from "node:net";
 import { generateFrpcToml, type ServerConfig } from "./config.ts";
 import { FrpcProcess } from "./frpc.ts";
 import { toProxyDefinition } from "./proxy.ts";
@@ -18,10 +19,26 @@ export class TunnelManager {
 
   constructor(store: DataStore, frpcBin: string) { this.store = store; this.frpc = new FrpcProcess(frpcBin); }
   async load() { await this.store.init(); this.config = await this.store.config(); this.current = await this.store.tunnels(); }
-  status() { return { configured: !!this.config, running: this.frpc.running(), connected: this.frpc.running(), pid: 0 }; }
+  status() { return { configured: !!this.config, running: this.frpc.running(), connected: this.frpc.isConnected(), pid: 0 }; }
   logs() { return this.events; }
+  clearLogs() { this.events = []; }
   tunnels() { return this.current.map(tunnel => ({ ...tunnel, route: routeText(tunnel, this.config || {}) })); }
   serverConfig() { return this.config ? { ...this.config, authToken: "", adminPassword: "" } : null; }
+
+  async testConnection(addr: string, port: number) {
+    if (!addr.trim() || !Number.isInteger(port) || port < 1 || port > 65535) return { ok: false, err: "服务器地址或端口无效" };
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const socket = connect({ host: addr.trim(), port });
+        const timer = setTimeout(() => socket.destroy(new Error("连接超时")), 5_000);
+        socket.once("connect", () => { clearTimeout(timer); socket.end(); resolve(); });
+        socket.once("error", error => { clearTimeout(timer); reject(error); });
+      });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, err: error instanceof Error ? error.message : "连接失败" };
+    }
+  }
 
   private log(message: string, level = "info") { this.events.unshift({ timestamp: new Date().toISOString(), message, level }); this.events = this.events.slice(0, 100); }
   async saveConfig(input: ServerConfig) {
@@ -43,6 +60,7 @@ export class TunnelManager {
     this.log("正在启动隧道管理器...");
     this.frpc.start(join(this.store.dir, "frpc.toml"), line => this.log(`frpc: ${line}`), code => this.log(`frpc 进程已退出，状态码: ${code}`, "error"));
     await this.waitForAdmin();
+    await this.waitForServerLogin();
     await this.syncProxies();
     this.log("隧道管理器已连接");
   }
@@ -142,6 +160,16 @@ export class TunnelManager {
     }
     throw new Error(`Admin API 未就绪: ${lastError instanceof Error ? lastError.message : "timeout"}`);
   }
+  private async waitForServerLogin() {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 5_000) {
+      if (this.frpc.isConnected()) return;
+      if (!this.frpc.running()) throw new Error("frpc exited before logging into the server");
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw new Error("frpc did not log in to the server within 5 seconds");
+  }
+
   private async syncProxies() {
     const listed = await (await this.admin("/api/store/proxies")).json() as { proxies?: Array<{ name: string }> };
     const existing = new Set((listed.proxies || []).map(proxy => proxy.name));

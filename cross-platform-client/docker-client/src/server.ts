@@ -68,6 +68,14 @@ export async function createMeilinkServer(options: MeilinkServerOptions = {}): P
         return json(response, 200, manager.status());
       }
       if (url.pathname === "/api/events" && request.method === "GET") return json(response, 200, manager.logs());
+      if (url.pathname === "/api/events" && request.method === "DELETE") {
+        manager.clearLogs();
+        return json(response, 200, { ok: true });
+      }
+      if (url.pathname === "/api/test-connection" && request.method === "POST") {
+        const input = await body(request);
+        return json(response, 200, await manager.testConnection(String(input.addr || ""), Number(input.port)));
+      }
       if (url.pathname === "/api/tunnels" && request.method === "GET") {
         await manager.refreshRuntime();
         return json(response, 200, manager.tunnels());

@@ -9,3 +9,7 @@ test("routeText uses frpc remote address for an HTTP tunnel", () => {
 test("routeText derives an HTTPS tunnel route from the configured subdomain host", () => {
   assert.equal(routeText({ type: "https", subdomain: "photos.example.test" }, { subDomainHost: "example.test", serverAddr: "frp.example.test" }), "https://photos.example.test");
 });
+
+test("routeText keeps a complete frpc public URL instead of prefixing it twice", () => {
+  assert.equal(routeText({ type: "http", remoteAddr: "https://photo.example.test" }, { subDomainHost: "example.test" }), "https://photo.example.test");
+});
