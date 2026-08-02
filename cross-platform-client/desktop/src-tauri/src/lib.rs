@@ -339,7 +339,12 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show-main" => {
-                        open_window(app.clone(), "main".into());
+                        open_window(
+                            app.clone(),
+                            "main".into(),
+                            None,
+                            app.state::<TunnelEditState>(),
+                        );
                     }
                     "quit" => {
                         quit_app(app.clone(), app.state::<SidecarState>());
@@ -426,7 +431,12 @@ pub fn run() {
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(300));
-                open_window(handle, "main".into());
+                open_window(
+                    handle.clone(),
+                    "main".into(),
+                    None,
+                    handle.state::<TunnelEditState>(),
+                );
             });
 
             Ok(())
