@@ -21,6 +21,31 @@ export MEILINK_ADMIN_PASSWORD='use-a-long-random-password'
 docker compose -f docker-compose.client.yml up -d --no-build
 ```
 
+### NAS UI / docker run (without Compose)
+
+Import `meilink-docker-client-1.1.0-amd64.tar` for Intel/AMD NAS devices, or
+`meilink-docker-client-1.1.0-arm64.tar` for ARM64 NAS devices. In the NAS
+container UI, create a container from the imported image and set:
+
+| Setting | Value |
+|---|---|
+| Container port | `17420/TCP` |
+| Host port | `17420` (or any unused host port) |
+| Environment | `MEILINK_ADMIN_PASSWORD=<strong password>` |
+| Volume | A persistent host folder mounted at `/data` |
+| Restart policy | `unless-stopped` |
+
+Equivalent command-line deployment:
+
+```bash
+docker run -d --name meilink-client \
+  -p 17420:17420 \
+  -e MEILINK_ADMIN_PASSWORD='use-a-long-random-password' \
+  -v /path/on/nas/meilink-data:/data \
+  --restart unless-stopped \
+  meilink-client:1.1.0
+```
+
 Open `http://NAS-IP:17420`, log in as `admin`, then save the frps connection
 settings before starting tunnels. Persistent configuration is in `./data`.
 
