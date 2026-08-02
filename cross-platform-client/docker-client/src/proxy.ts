@@ -19,11 +19,17 @@ export function toProxyDefinition(tunnel: Tunnel, baseHost = ""): ProxyDefinitio
     localIP: tunnel.localIP,
     localPort: tunnel.localPort,
     ...(subdomain ? { subdomain } : {}),
+    ...(tunnel.customDomains?.length ? { customDomains: tunnel.customDomains } : {}),
   };
   return {
     name: tunnel.name,
     type: tunnel.type,
-    [tunnel.type]: tunnel.type === "http" ? { ...http, locations: ["/"] } : http,
+    [tunnel.type]: tunnel.type === "http" ? {
+      ...http, locations: ["/"],
+      ...(tunnel.httpUser ? { httpUser: tunnel.httpUser } : {}),
+      ...(tunnel.httpPassword ? { httpPassword: tunnel.httpPassword } : {}),
+      ...(tunnel.hostHeaderRewrite ? { hostHeaderRewrite: tunnel.hostHeaderRewrite } : {}),
+    } : http,
   };
 }
 

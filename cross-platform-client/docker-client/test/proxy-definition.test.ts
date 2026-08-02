@@ -21,3 +21,17 @@ test("toProxyDefinition emits the frpc Store API shape for TCP tunnels", () => {
     tcp: { localIP: "192.168.1.10", localPort: 22, remotePort: 60022 },
   });
 });
+
+test("toProxyDefinition preserves the native HTTP routing and authentication fields", () => {
+  assert.deepEqual(toProxyDefinition({
+    id: "photo-id", name: "photo", type: "http", localIP: "127.0.0.1", localPort: 5000,
+    subdomain: "photo.example.test", customDomains: ["photos.example.test"],
+    httpUser: "viewer", httpPassword: "secret", hostHeaderRewrite: "photos.internal", enabled: true,
+  }, "example.test"), {
+    name: "photo", type: "http",
+    http: {
+      localIP: "127.0.0.1", localPort: 5000, subdomain: "photo", customDomains: ["photos.example.test"],
+      locations: ["/"], httpUser: "viewer", httpPassword: "secret", hostHeaderRewrite: "photos.internal",
+    },
+  });
+});

@@ -7,6 +7,8 @@ import { routeText } from "./display.ts";
 import { mergeRuntimeStatus } from "./runtime-status.ts";
 import { DataStore, type Tunnel } from "./store.ts";
 
+export type TunnelInput = Omit<Tunnel, "id" | "status" | "runtimeStatus" | "remoteAddr" | "errorMessage" | "createdAt" | "updatedAt">;
+
 export class TunnelManager {
   private frpc: FrpcProcess;
   private events: Array<{ timestamp: string; message: string; level: string }> = [];
@@ -48,6 +50,70 @@ export class TunnelManager {
   stop() { this.frpc.stop(); this.log("隧道管理器已停止"); }
   async saveTunnels(tunnels: Tunnel[]) { this.current = tunnels; await this.store.saveTunnels(tunnels); if (this.frpc.running()) await this.syncProxies(); }
 
+  async createTunnel(input: TunnelInput): Promise<Tunnel> {
+    const tunnel = this.normalizedTunnel(input);
+    this.assertUniqueName(tunnel.name);
+    await this.syncTunnel(tunnel);
+    this.current.push(tunnel);
+    await this.store.saveTunnels(this.current);
+    this.log(`隧道 "${tunnel.name}" 已创建`);
+    return { ...tunnel };
+  }
+
+  async updateTunnel(id: string, input: TunnelInput): Promise<Tunnel> {
+    const index = this.current.findIndex(tunnel => tunnel.id === id);
+    if (index < 0) throw new Error("隧道不存在");
+    const previous = this.current[index];
+    const tunnel = this.normalizedTunnel(input, previous);
+    this.assertUniqueName(tunnel.name, id);
+    // A disabled tunnel has already been removed from frpc Store API. Renaming it
+    // must not fail merely because there is no old proxy to remove.
+    if (this.frpc.running() && previous.enabled && previous.name !== tunnel.name) {
+      try { await this.deleteProxy(previous.name); } catch (error) { this.log(`清理旧隧道 "${previous.name}" 失败: ${error instanceof Error ? error.message : "unknown"}`, "warning"); }
+    }
+    await this.syncTunnel(tunnel);
+    this.current[index] = tunnel;
+    await this.store.saveTunnels(this.current);
+    this.log(`隧道 "${tunnel.name}" 已更新`);
+    return { ...tunnel };
+  }
+
+  async deleteTunnel(id: string): Promise<void> {
+    const index = this.current.findIndex(tunnel => tunnel.id === id);
+    if (index < 0) throw new Error("隧道不存在");
+    const [tunnel] = this.current.slice(index, index + 1);
+    if (this.frpc.running() && tunnel.enabled) {
+      try { await this.deleteProxy(tunnel.name); } catch (error) { this.log(`清理隧道 "${tunnel.name}" 失败: ${error instanceof Error ? error.message : "unknown"}`, "warning"); }
+    }
+    this.current.splice(index, 1);
+    await this.store.saveTunnels(this.current);
+    this.log(`隧道 "${tunnel.name}" 已删除`);
+  }
+
+  async toggleTunnel(id: string, enabled: boolean): Promise<Tunnel> {
+    const index = this.current.findIndex(tunnel => tunnel.id === id);
+    if (index < 0) throw new Error("隧道不存在");
+    const previous = this.current[index];
+    const tunnel = {
+      ...previous,
+      enabled,
+      runtimeStatus: enabled ? "wait start" : "closed",
+      errorMessage: "",
+      remoteAddr: enabled ? previous.remoteAddr || "" : "",
+      updatedAt: new Date().toISOString(),
+    };
+    if (this.frpc.running()) {
+      if (enabled) await this.syncTunnel(tunnel);
+      else {
+        try { await this.deleteProxy(tunnel.name); } catch (error) { this.log(`禁用隧道 "${tunnel.name}" 时清理代理失败: ${error instanceof Error ? error.message : "unknown"}`, "warning"); }
+      }
+    }
+    this.current[index] = tunnel;
+    await this.store.saveTunnels(this.current);
+    this.log(`隧道 "${tunnel.name}" 已${enabled ? "启用" : "禁用"}`);
+    return { ...tunnel };
+  }
+
   async refreshRuntime() {
     if (!this.config || !this.frpc.running()) {
       this.current = mergeRuntimeStatus(this.current, {});
@@ -85,5 +151,51 @@ export class TunnelManager {
       existing.delete(tunnel.name);
     }
     for (const name of existing) await this.admin(`/api/store/proxies/${encodeURIComponent(name)}`, { method: "DELETE" });
+  }
+
+  private normalizedTunnel(input: TunnelInput, previous?: Tunnel): Tunnel {
+    const name = input.name.trim();
+    if (!name) throw new Error("隧道名称不能为空");
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name)) throw new Error("隧道名称仅支持字母、数字、点、下划线和连字符");
+    if (!Number.isInteger(input.localPort) || input.localPort < 1 || input.localPort > 65535) throw new Error("本地端口必须在 1 到 65535 之间");
+    if ((input.type === "tcp" || input.type === "udp") && input.remotePort !== undefined && (!Number.isInteger(input.remotePort) || input.remotePort < 1 || input.remotePort > 65535)) throw new Error("远程端口必须在 1 到 65535 之间");
+    const now = new Date().toISOString();
+    return {
+      ...input,
+      id: previous?.id || crypto.randomUUID(),
+      name,
+      localIP: input.localIP.trim() || "127.0.0.1",
+      subdomain: input.subdomain?.trim() || undefined,
+      remotePort: input.remotePort || undefined,
+      customDomains: input.customDomains?.map(domain => domain.trim()).filter(Boolean) || [],
+      httpUser: input.httpUser?.trim() || undefined,
+      // The edit dialog intentionally does not reveal saved credentials. A blank value therefore means
+      // "leave unchanged", matching the server-config password fields.
+      httpPassword: input.httpPassword || previous?.httpPassword || undefined,
+      hostHeaderRewrite: input.hostHeaderRewrite?.trim() || undefined,
+      enabled: input.enabled !== false,
+      runtimeStatus: input.enabled === false ? "closed" : previous?.runtimeStatus || "new",
+      remoteAddr: previous?.remoteAddr || "",
+      errorMessage: "",
+      createdAt: previous?.createdAt || now,
+      updatedAt: now,
+    };
+  }
+
+  private assertUniqueName(name: string, exceptId?: string) {
+    if (this.current.some(tunnel => tunnel.name === name && tunnel.id !== exceptId)) throw new Error("隧道名称已存在");
+  }
+
+  private async syncTunnel(tunnel: Tunnel) {
+    if (!this.frpc.running() || !tunnel.enabled) return;
+    const listed = await (await this.admin("/api/store/proxies")).json() as { proxies?: Array<{ name: string }> };
+    const exists = (listed.proxies || []).some(proxy => proxy.name === tunnel.name);
+    await this.admin(exists ? `/api/store/proxies/${encodeURIComponent(tunnel.name)}` : "/api/store/proxies", {
+      method: exists ? "PUT" : "POST", body: JSON.stringify(toProxyDefinition(tunnel, this.config!.subDomainHost)),
+    });
+  }
+
+  private async deleteProxy(name: string) {
+    await this.admin(`/api/store/proxies/${encodeURIComponent(name)}`, { method: "DELETE" });
   }
 }
