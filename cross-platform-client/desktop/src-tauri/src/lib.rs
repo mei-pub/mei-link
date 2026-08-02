@@ -5,7 +5,7 @@ use std::process::Command;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, State, WebviewWindowBuilder, WindowEvent,
 };
 #[cfg(target_os = "macos")]
 use tauri::PhysicalPosition;
@@ -20,6 +20,10 @@ struct TrayIconState(Mutex<Option<TrayIcon>>);
 
 /// Holds the discovered API base URL (e.g. "http://127.0.0.1:51234").
 struct ApiUrl(Mutex<String>);
+
+/// Carries the selected tunnel ID across isolated Tauri webviews.
+/// sessionStorage is per-webview and therefore cannot transfer this state.
+struct TunnelEditState(Mutex<Option<String>>);
 
 /// Windows does not automatically terminate a child process tree. The Go
 /// sidecar owns frpc, so killing only the sidecar leaves frpc orphaned. Force
@@ -53,12 +57,24 @@ struct DesktopSettings {
 }
 
 #[tauri::command]
-fn open_window(app: AppHandle, name: String) {
+fn open_window(
+    app: AppHandle,
+    name: String,
+    tunnel_id: Option<String>,
+    state: State<TunnelEditState>,
+) {
     if let Some((label, title, w, h, resizable)) =
         WINDOW_SPECS.iter().find(|(l, _, _, _, _)| *l == name)
     {
-        // Singleton: if it exists, just focus it.
+        if *label == "tunnel-edit" {
+            *state.0.lock().unwrap() = tunnel_id.clone();
+        }
+
+        // Singleton: if it exists, focus it and update its edit context.
         if let Some(win) = app.get_webview_window(label) {
+            if *label == "tunnel-edit" {
+                let _ = win.emit("tunnel-edit-requested", tunnel_id);
+            }
             let _ = win.show();
             let _ = win.set_focus();
             return;
@@ -75,6 +91,12 @@ fn open_window(app: AppHandle, name: String) {
         }
         let _ = builder.build();
     }
+}
+
+/// Return and clear the ID selected immediately before opening the edit window.
+#[tauri::command]
+fn take_tunnel_edit_id(state: State<TunnelEditState>) -> Option<String> {
+    state.0.lock().unwrap().take()
 }
 
 /// Returns the sidecar API base URL so the frontend can fetch from it.
@@ -248,6 +270,7 @@ pub fn run() {
         .manage(SidecarState(Mutex::new(None)))
         .manage(ApiUrl(Mutex::new(String::new())))
         .manage(TrayIconState(Mutex::new(None)))
+        .manage(TunnelEditState(Mutex::new(None)))
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -426,6 +449,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_window,
+            take_tunnel_edit_id,
             get_api_url,
             fit_window_to_content,
             quit_app,

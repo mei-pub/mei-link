@@ -161,9 +161,9 @@ export const api = {
 };
 
 /** Open another window via the Rust command. */
-export async function openWindow(name) {
+export async function openWindow(name, { tunnelId = null } = {}) {
   try {
-    return await _invoke("open_window", { name });
+    return await _invoke("open_window", { name, tunnelId });
   } catch (invokeError) {
     try {
       const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
@@ -175,7 +175,10 @@ export async function openWindow(name) {
         await existing.setFocus();
         return;
       }
-      const win = new WebviewWindow(name, spec);
+      const url = tunnelId && name === "tunnel-edit"
+        ? `tunnel-edit.html?editTunnelId=${encodeURIComponent(tunnelId)}`
+        : spec.url;
+      const win = new WebviewWindow(name, { ...spec, url });
       await new Promise((resolve, reject) => {
         const offCreated = win.once("tauri://created", () => {
           offCreated.then((off) => off()).catch(() => {});
@@ -195,6 +198,16 @@ export async function openWindow(name) {
       throw fallbackError;
     }
   }
+}
+
+/** Read the one-time tunnel edit context kept by the Tauri process. */
+export function takeTunnelEditId() {
+  return _invoke("take_tunnel_edit_id");
+}
+
+/** Receive edit requests when the singleton edit window is already open. */
+export function onTunnelEditRequest(handler) {
+  return _listen("tunnel-edit-requested", handler);
 }
 
 function windowSpec(name) {

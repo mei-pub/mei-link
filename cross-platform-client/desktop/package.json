@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node tests/accessibility-check.mjs && node tests/display-helpers.mjs && node tests/sidecar-ready.mjs && node tests/frpc-bundle-config.mjs",
+    "test": "node tests/accessibility-check.mjs && node tests/display-helpers.mjs && node tests/sidecar-ready.mjs && node tests/frpc-bundle-config.mjs && node tests/tunnel-edit-window-state.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

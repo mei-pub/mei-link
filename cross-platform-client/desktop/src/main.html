@@ -88,7 +88,7 @@ document.getElementById("addBtn").innerHTML = icons.plus + " 添加隧道";
 document.getElementById("logsBtn").innerHTML = icons.log + " 查看日志";
 document.getElementById("clearLogBtn").textContent = "清空日志";
 document.getElementById("emptyAdd").innerHTML = icons.plus + " 添加隧道";
-document.getElementById("emptyAdd").onclick = () => { sessionStorage.removeItem("editTunnelId"); openWindow("tunnel-edit"); };
+document.getElementById("emptyAdd").onclick = () => openWindow("tunnel-edit");
 
 document.getElementById("connBtn").onclick = async () => {
   const btn = document.getElementById("connBtn");
@@ -119,7 +119,7 @@ document.getElementById("restartBtn").onclick = async () => {
   }
 };
 document.getElementById("settingsBtn").onclick = () => openWindow("settings");
-document.getElementById("addBtn").onclick = () => { sessionStorage.removeItem("editTunnelId"); openWindow("tunnel-edit"); };
+document.getElementById("addBtn").onclick = () => openWindow("tunnel-edit");
 document.getElementById("logsBtn").onclick = () => openWindow("logs");
 document.getElementById("clearLogBtn").onclick = async () => { await api.clearEvents(); };
 
@@ -182,7 +182,7 @@ function showMenu(id, container) {
   dd.className = "dropdown show";
   dd.innerHTML = `<div class="dropdown-item" data-edit="${id}">${icons.settings} 编辑</div><div class="dropdown-item danger" data-del="${id}">${icons.trash} 删除</div>`;
   container.appendChild(dd);
-  dd.querySelector("[data-edit]").onclick = () => { sessionStorage.setItem("editTunnelId", id); openWindow("tunnel-edit"); dd.remove(); };
+  dd.querySelector("[data-edit]").onclick = () => { openWindow("tunnel-edit", { tunnelId: id }); dd.remove(); };
   dd.querySelector("[data-del]").onclick = async () => { if (await customConfirm("删除隧道", "确定删除此隧道？删除后无法恢复。", { confirmText: "删除", danger: true })) { await api.deleteTunnel(id); refresh(); } dd.remove(); };
 }
 document.addEventListener("click", () => { const d = document.querySelector(".dropdown.show"); if (d) d.remove(); });

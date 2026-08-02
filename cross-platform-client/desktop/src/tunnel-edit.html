@@ -98,7 +98,7 @@
 </div>
 
 <script type="module">
-import { api, closeWindow, autoFitWindow } from "./lib/api.js";
+import { api, closeWindow, autoFitWindow, onTunnelEditRequest, takeTunnelEditId } from "./lib/api.js";
 import { customAlert } from "./lib/dialog.js";
 let selectedType = "http"; let editId = null;
 document.getElementById("cancelBtn").onclick = () => closeWindow();
@@ -119,10 +119,14 @@ document.getElementById("saveBtn").onclick = async () => {
   const tunnel = { name, type: selectedType, localIP: document.getElementById("localIP").value || "127.0.0.1", localPort, remotePort: parseInt(document.getElementById("remotePort").value) || 0, subdomain: document.getElementById("subdomain").value.trim(), enabled: document.getElementById("enabled").checked };
   try { if (editId) { tunnel.id = editId; await api.updateTunnel(tunnel); } else { await api.addTunnel(tunnel); } closeWindow(); } catch(e) { await customAlert("保存失败: " + e.message); }
 };
-const editTunnelId = sessionStorage.getItem("editTunnelId");
-if (editTunnelId) { sessionStorage.removeItem("editTunnelId"); editId = editTunnelId; document.getElementById("formTitle").textContent = "编辑隧道"; document.getElementById("saveBtn").textContent = "保存"; document.getElementById("saveBtn").setAttribute("aria-label", "保存"); document.getElementById("saveBtn").title = "保存";
+onTunnelEditRequest(() => window.location.reload()).catch(() => {});
+async function initializeEditContext() {
+  const editTunnelId = await takeTunnelEditId().catch(() => new URLSearchParams(window.location.search).get("editTunnelId"));
+if (editTunnelId) { editId = editTunnelId; document.getElementById("formTitle").textContent = "编辑隧道"; document.getElementById("saveBtn").textContent = "保存"; document.getElementById("saveBtn").setAttribute("aria-label", "保存"); document.getElementById("saveBtn").title = "保存";
   api.getTunnels().then(tunnels => { const t = tunnels.find(x => x.id === editId); if (!t) return; document.getElementById("name").value = t.name; document.getElementById("localPort").value = t.localPort; document.getElementById("localIP").value = t.localIP || "127.0.0.1"; document.getElementById("remotePort").value = t.remotePort || ""; document.getElementById("subdomain").value = t.subdomain || ""; document.getElementById("enabled").checked = t.enabled; selectType(t.type); autoFitWindow(); });
 }
+}
+void initializeEditContext();
 </script>
 </body>
 </html>
