@@ -23,5 +23,6 @@ test("web UI provides an accessible tunnel edit dialog and per-tunnel actions", 
   assert.match(html, /data-view="logs"/);
   assert.match(html, /role="switch"/);
   assert.match(html, /id="testConnectionButton"/);
+  assert.match(html, /泛域名/);
   assert.match(script, /<svg/);
 });

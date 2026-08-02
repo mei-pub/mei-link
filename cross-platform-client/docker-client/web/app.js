@@ -36,7 +36,7 @@ function notify(message, error = false) { const toast = $("#toast"); toast.textC
 function statusKey(tunnel) { return tunnel.runtimeStatus || tunnel.status || "new"; }
 function statusLabel(tunnel) { return labels[statusKey(tunnel)] || "新建"; }
 function routeLine(tunnel) { return tunnel.route || "等待服务端分配访问地址"; }
-function safeRoute(tunnel) { return /^https?:\/\//i.test(tunnel.route || "") ? tunnel.route : ""; }
+function safeRoute(tunnel) { return /^https?:\/\//i.test(tunnel.route || "") && !tunnel.route.includes("*") ? tunnel.route : ""; }
 function setSwitch(control, checked) { control.setAttribute("aria-checked", String(checked)); const input = field(control.closest("form") || document, control.dataset.switch); if (input) input.checked = checked; }
 function bindSwitches(root = document) { root.querySelectorAll("[data-switch]").forEach(control => control.addEventListener("click", () => setSwitch(control, control.getAttribute("aria-checked") !== "true"))); }
 bindSwitches();

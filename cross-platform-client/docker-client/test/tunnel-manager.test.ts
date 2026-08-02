@@ -79,3 +79,16 @@ test("TunnelManager preserves an HTTP password when an edit leaves it blank", as
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("TunnelManager rejects a wildcard custom domain under the configured subdomain root", async () => {
+  const { dir, manager } = await managerForTest();
+  try {
+    await manager.saveConfig({
+      serverAddr: "frp.example.test", serverPort: 7000, authToken: "token", subDomainHost: "example.test",
+      tlsEnabled: true, adminPort: 7400, adminUser: "admin", adminPassword: "password", vhostHTTPPort: 8080, vhostHTTPSPort: 8443,
+    });
+    await assert.rejects(() => manager.createTunnel({ ...photo, customDomains: ["*.example.test"] }), /泛域名/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

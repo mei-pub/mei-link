@@ -1,9 +1,9 @@
-export type RouteTunnel = { type: string; subdomain?: string; remoteAddr?: string; remotePort?: number };
+export type RouteTunnel = { type: string; subdomain?: string; customDomains?: string[]; remoteAddr?: string; remotePort?: number };
 export type RouteConfig = { subDomainHost?: string; serverAddr?: string; vhostHTTPPort?: number; vhostHTTPSPort?: number };
 
 export function routeText(tunnel: RouteTunnel, config: RouteConfig): string {
   if (tunnel.type === "http" || tunnel.type === "https") {
-    const host = tunnel.remoteAddr || fullHost(tunnel.subdomain, config.subDomainHost);
+    const host = tunnel.remoteAddr || fullHost(tunnel.subdomain, config.subDomainHost) || tunnel.customDomains?.[0]?.trim();
     if (!host) return "";
     return routeURL(tunnel.type, host, tunnel.type === "http" ? config.vhostHTTPPort ?? 8080 : config.vhostHTTPSPort ?? 8443);
   }

@@ -195,6 +195,8 @@ export class TunnelManager {
     if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name)) throw new Error("隧道名称仅支持字母、数字、点、下划线和连字符");
     if (!Number.isInteger(input.localPort) || input.localPort < 1 || input.localPort > 65535) throw new Error("本地端口必须在 1 到 65535 之间");
     if ((input.type === "tcp" || input.type === "udp") && input.remotePort !== undefined && (!Number.isInteger(input.remotePort) || input.remotePort < 1 || input.remotePort > 65535)) throw new Error("远程端口必须在 1 到 65535 之间");
+    const customDomains = input.customDomains?.map(domain => domain.trim()).filter(Boolean) || [];
+    this.assertCustomDomains(input.type, customDomains);
     const now = new Date().toISOString();
     return {
       ...input,
@@ -203,7 +205,7 @@ export class TunnelManager {
       localIP: input.localIP.trim() || "127.0.0.1",
       subdomain: input.subdomain?.trim() || undefined,
       remotePort: input.remotePort || undefined,
-      customDomains: input.customDomains?.map(domain => domain.trim()).filter(Boolean) || [],
+      customDomains,
       httpUser: input.httpUser?.trim() || undefined,
       // The edit dialog intentionally does not reveal saved credentials. A blank value therefore means
       // "leave unchanged", matching the server-config password fields.
@@ -220,6 +222,17 @@ export class TunnelManager {
 
   private assertUniqueName(name: string, exceptId?: string) {
     if (this.current.some(tunnel => tunnel.name === name && tunnel.id !== exceptId)) throw new Error("隧道名称已存在");
+  }
+
+  private assertCustomDomains(type: Tunnel["type"], domains: string[]) {
+    for (const domain of domains) {
+      if (!domain.includes("*")) continue;
+      if (type !== "http" && type !== "https") throw new Error("泛域名仅支持 HTTP 或 HTTPS 隧道");
+      if (!/^\*\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(domain)) throw new Error("泛域名格式应为 *.example.com");
+      const root = this.config?.subDomainHost.trim().toLowerCase();
+      const suffix = domain.slice(2).toLowerCase();
+      if (root && (suffix === root || suffix.endsWith(`.${root}`))) throw new Error(`泛域名 ${domain} 不能属于子域名根域 ${root}；请改用独立域名，或在 frps 中移除该子域名根域`);
+    }
   }
 
   private async syncTunnel(tunnel: Tunnel) {
