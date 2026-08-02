@@ -1,10 +1,14 @@
 use serde::Deserialize;
 use std::sync::Mutex;
+#[cfg(target_os = "windows")]
+use std::process::Command;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, PhysicalPosition, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, WebviewWindowBuilder, WindowEvent,
 };
+#[cfg(target_os = "macos")]
+use tauri::PhysicalPosition;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 
@@ -16,6 +20,20 @@ struct TrayIconState(Mutex<Option<TrayIcon>>);
 
 /// Holds the discovered API base URL (e.g. "http://127.0.0.1:51234").
 struct ApiUrl(Mutex<String>);
+
+/// Windows does not automatically terminate a child process tree. The Go
+/// sidecar owns frpc, so killing only the sidecar leaves frpc orphaned. Force
+/// the complete tree down before the Tauri runtime exits.
+fn stop_sidecar_tree(child: CommandChild) {
+    #[cfg(target_os = "windows")]
+    {
+        let pid = child.pid().to_string();
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid, "/T", "/F"])
+            .status();
+    }
+    let _ = child.kill();
+}
 
 /// Window definitions: label -> (title, width, height, resizable).
 /// The popover window is pre-defined in tauri.conf.json; other windows are
@@ -101,14 +119,17 @@ fn quit_app(app: AppHandle, state: tauri::State<SidecarState>) {
         let url = url_state.0.lock().unwrap().clone();
         if !url.is_empty() {
             // Stop frpc via API
-            let _ = reqwest::blocking::Client::new()
+            let _ = reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_millis(1_200))
+                .build()
+                .and_then(|client| client
                 .post(format!("{}/api/control/stop", url))
-                .send();
+                .send());
         }
     }
     // Kill the sidecar child.
     if let Some(child) = state.0.lock().unwrap().take() {
-        let _ = child.kill();
+        stop_sidecar_tree(child);
     }
     app.exit(0);
 }
@@ -169,6 +190,7 @@ fn saved_menu_bar_icon_style() -> String {
         .unwrap_or_else(|| "portal".into())
 }
 
+#[cfg(target_os = "macos")]
 fn popover_position_from_tray_rect(
     tray_x: f64,
     tray_y: f64,
@@ -231,8 +253,33 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             // --- Start the Go sidecar ---
-            let _ = std::fs::remove_file(data_dir().join("sidecar.port"));
-            let (_rx, child) = app.shell().sidecar("meilink")?.args(["serve"]).spawn()?;
+            let sidecar_data_dir = data_dir();
+            let _ = std::fs::remove_file(sidecar_data_dir.join("sidecar.port"));
+            // Pass the exact directory Rust polls to the Go sidecar. On Windows
+            // the two runtimes can otherwise resolve a user's home directory
+            // differently, leaving sidecar.port undiscoverable.
+            let sidecar_args = vec![
+                "serve".to_string(),
+                "--config-dir".to_string(),
+                sidecar_data_dir.to_string_lossy().into_owned(),
+            ];
+            // frpc is bundled as an application resource and deliberately
+            // passed by absolute path. The Go sidecar must never rely on a
+            // network download or Windows install-directory conventions.
+            let frpc_path = app.path().resource_dir()?.join("frpc.exe");
+            if !frpc_path.is_file() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("bundled frpc binary not found at {}", frpc_path.display()),
+                )
+                .into());
+            }
+            let (_rx, child) = app
+                .shell()
+                .sidecar("meilink")?
+                .args(sidecar_args)
+                .env("MEILINK_FRPC_BIN", frpc_path.to_string_lossy().into_owned())
+                .spawn()?;
             app.state::<SidecarState>().0.lock().unwrap().replace(child);
             wait_for_sidecar(app.handle().clone());
 
@@ -277,10 +324,15 @@ pub fn run() {
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
+                    // Positioner keeps the actual Windows notification-area
+                    // rectangle from tray events. Without this call it has no
+                    // tray coordinates and leaves the popover at its default
+                    // top-left position.
+                    tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
-                        rect,
+                        rect: _rect,
                         ..
                     } = event
                     {
@@ -292,8 +344,8 @@ pub fn run() {
                                 #[cfg(target_os = "macos")]
                                 {
                                     let scale = popover.scale_factor().unwrap_or(1.0);
-                                    let tray_pos = rect.position.to_physical::<f64>(scale);
-                                    let tray_size = rect.size.to_physical::<f64>(scale);
+                                    let tray_pos = _rect.position.to_physical::<f64>(scale);
+                                    let tray_size = _rect.size.to_physical::<f64>(scale);
                                     let popover_width = popover
                                         .outer_size()
                                         .map(|size| size.width as f64)
@@ -324,8 +376,11 @@ pub fn run() {
                                 #[cfg(not(target_os = "macos"))]
                                 {
                                     use tauri_plugin_positioner::{Position, WindowExt};
-                                    let _ =
-                                        popover.move_window_constrained(Position::TrayBottomCenter);
+                                    // TrayBottomCenter can place the popover off-screen beneath
+                                    // a bottom-mounted Windows taskbar. Anchor it to the icon.
+                                    if let Err(error) = popover.move_window_constrained(Position::TrayCenter) {
+                                        eprintln!("failed to position tray popover: {error}");
+                                    }
                                 }
                                 let _ = popover.show();
                                 let _ = popover.set_focus();
