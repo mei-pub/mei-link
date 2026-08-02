@@ -9,6 +9,7 @@ import { mergeRuntimeStatus } from "./runtime-status.ts";
 import { DataStore, type Tunnel } from "./store.ts";
 
 export type TunnelInput = Omit<Tunnel, "id" | "status" | "runtimeStatus" | "remoteAddr" | "errorMessage" | "createdAt" | "updatedAt">;
+const validPort = (value: number) => Number.isInteger(value) && value >= 1 && value <= 65535;
 
 export class TunnelManager {
   private frpc: FrpcProcess;
@@ -18,7 +19,7 @@ export class TunnelManager {
   private store: DataStore;
 
   constructor(store: DataStore, frpcBin: string) { this.store = store; this.frpc = new FrpcProcess(frpcBin); }
-  async load() { await this.store.init(); this.config = await this.store.config(); this.current = await this.store.tunnels(); }
+  async load() { await this.store.init(); const config = await this.store.config(); this.config = config ? this.normalizedConfig(config) : null; this.current = await this.store.tunnels(); }
   status() { return { configured: !!this.config, running: this.frpc.running(), connected: this.frpc.isConnected(), pid: 0 }; }
   logs() { return this.events; }
   clearLogs() { this.events = []; }
@@ -43,12 +44,12 @@ export class TunnelManager {
   private log(message: string, level = "info") { this.events.unshift({ timestamp: new Date().toISOString(), message, level }); this.events = this.events.slice(0, 100); }
   async saveConfig(input: ServerConfig) {
     const previous = this.config;
-    const config = {
+    const config = this.normalizedConfig({
       ...previous,
       ...input,
       authToken: input.authToken || previous?.authToken || "",
       adminPassword: input.adminPassword || previous?.adminPassword || "",
-    } as ServerConfig;
+    } as ServerConfig);
     this.config = config;
     await this.store.saveConfig(config);
     await writeFile(join(this.store.dir, "frpc.toml"), generateFrpcToml(config, this.store.dir), { mode: 0o600 });
@@ -147,6 +148,13 @@ export class TunnelManager {
   }
 
   private auth() { return `Basic ${Buffer.from(`${this.config!.adminUser}:${this.config!.adminPassword}`).toString("base64")}`; }
+  private normalizedConfig(config: ServerConfig): ServerConfig {
+    return {
+      ...config,
+      vhostHTTPPort: validPort(config.vhostHTTPPort) ? config.vhostHTTPPort : 8080,
+      vhostHTTPSPort: validPort(config.vhostHTTPSPort) ? config.vhostHTTPSPort : 8443,
+    };
+  }
   private async admin(path: string, init: RequestInit = {}) {
     const response = await fetch(`http://127.0.0.1:${this.config!.adminPort}${path}`, { ...init, signal: AbortSignal.timeout(3_000), headers: { Authorization: this.auth(), "content-type": "application/json", ...(init.headers || {}) } });
     if (!response.ok) throw new Error(`frpc Admin API ${init.method || "GET"} ${path} failed: ${response.status}`);

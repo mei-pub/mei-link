@@ -7,6 +7,8 @@ export interface ServerConfig {
   adminPort: number;
   adminUser: string;
   adminPassword: string;
+  vhostHTTPPort: number;
+  vhostHTTPSPort: number;
 }
 
 export function generateFrpcToml(config: ServerConfig, dataDir: string): string {

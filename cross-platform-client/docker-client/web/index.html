@@ -46,6 +46,7 @@
               <div id="connectionTestResult" class="test-result">请输入服务器地址后测试连通性</div>
               <div class="field"><label for="authToken">认证 Token</label><input id="authToken" class="input" name="authToken" type="password" placeholder="已保存时留空不修改"></div>
               <div class="field"><label for="subDomainHost">子域名根域</label><input id="subDomainHost" class="input" name="subDomainHost" placeholder="example.com"></div>
+              <div class="form-row"><div class="field"><label for="vhostHTTPPort">HTTP 公网端口</label><input id="vhostHTTPPort" class="input" name="vhostHTTPPort" type="number" min="1" max="65535" value="8080" required></div><div class="field"><label for="vhostHTTPSPort">HTTPS 公网端口</label><input id="vhostHTTPSPort" class="input" name="vhostHTTPSPort" type="number" min="1" max="65535" value="8443" required></div></div>
               <div class="switch-line"><div><span class="field-label">启用 TLS</span><div class="muted">使用 TLS 连接 FRP 服务端</div></div><button class="switch-control" type="button" role="switch" aria-checked="true" aria-label="启用 TLS" data-switch="tlsEnabled"><span></span></button><input name="tlsEnabled" type="checkbox" checked class="hidden"></div>
               <div class="actions" style="margin-top:18px"><button class="button">保存设置</button><button id="saveAndConnectButton" type="button" class="button secondary">保存并连接</button></div>
             </form>
