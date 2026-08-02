@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { generateFrpcToml, type ServerConfig } from "./config.ts";
 import { FrpcProcess } from "./frpc.ts";
 import { toProxyDefinition } from "./proxy.ts";
+import { routeText } from "./display.ts";
+import { mergeRuntimeStatus } from "./runtime-status.ts";
 import { DataStore, type Tunnel } from "./store.ts";
 
 export class TunnelManager {
@@ -16,7 +18,7 @@ export class TunnelManager {
   async load() { await this.store.init(); this.config = await this.store.config(); this.current = await this.store.tunnels(); }
   status() { return { configured: !!this.config, running: this.frpc.running(), connected: this.frpc.running(), pid: 0 }; }
   logs() { return this.events; }
-  tunnels() { return this.current; }
+  tunnels() { return this.current.map(tunnel => ({ ...tunnel, route: routeText(tunnel, this.config || {}) })); }
   serverConfig() { return this.config ? { ...this.config, authToken: "", adminPassword: "" } : null; }
 
   private log(message: string, level = "info") { this.events.unshift({ timestamp: new Date().toISOString(), message, level }); this.events = this.events.slice(0, 100); }
@@ -46,9 +48,23 @@ export class TunnelManager {
   stop() { this.frpc.stop(); this.log("隧道管理器已停止"); }
   async saveTunnels(tunnels: Tunnel[]) { this.current = tunnels; await this.store.saveTunnels(tunnels); if (this.frpc.running()) await this.syncProxies(); }
 
+  async refreshRuntime() {
+    if (!this.config || !this.frpc.running()) {
+      this.current = mergeRuntimeStatus(this.current, {});
+      return this.current;
+    }
+    try {
+      const status = await (await this.admin("/api/status")).json() as Record<string, Array<{ name: string; status?: string; remote_addr?: string; err?: string }>>;
+      this.current = mergeRuntimeStatus(this.current, status);
+    } catch {
+      this.current = mergeRuntimeStatus(this.current, {});
+    }
+    return this.current;
+  }
+
   private auth() { return `Basic ${Buffer.from(`${this.config!.adminUser}:${this.config!.adminPassword}`).toString("base64")}`; }
   private async admin(path: string, init: RequestInit = {}) {
-    const response = await fetch(`http://127.0.0.1:${this.config!.adminPort}${path}`, { ...init, headers: { Authorization: this.auth(), "content-type": "application/json", ...(init.headers || {}) } });
+    const response = await fetch(`http://127.0.0.1:${this.config!.adminPort}${path}`, { ...init, signal: AbortSignal.timeout(3_000), headers: { Authorization: this.auth(), "content-type": "application/json", ...(init.headers || {}) } });
     if (!response.ok) throw new Error(`frpc Admin API ${init.method || "GET"} ${path} failed: ${response.status}`);
     return response;
   }
