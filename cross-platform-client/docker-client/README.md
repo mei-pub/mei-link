@@ -10,6 +10,17 @@ export MEILINK_ADMIN_PASSWORD='use-a-long-random-password'
 docker compose -f docker-compose.client.yml up -d --build
 ```
 
+## Offline image deployment
+
+Use the release OCI archive when the NAS cannot build images itself. It contains
+both `linux/amd64` and `linux/arm64` variants:
+
+```bash
+docker load -i meilink-docker-client-1.1.0.oci.tar
+export MEILINK_ADMIN_PASSWORD='use-a-long-random-password'
+docker compose -f docker-compose.client.yml up -d --no-build
+```
+
 Open `http://NAS-IP:17420`, log in as `admin`, then save the frps connection
 settings before starting tunnels. Persistent configuration is in `./data`.
 
