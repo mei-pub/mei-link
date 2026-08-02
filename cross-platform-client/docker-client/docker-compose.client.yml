@@ -1,6 +1,6 @@
 services:
   meilink-client:
-    image: meilink-client:1.1.0
+    image: meilink-client:latest
     build: .
     ports: ["${MEILINK_WEB_PORT:-17420}:17420"]
     environment:

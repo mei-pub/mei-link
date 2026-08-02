@@ -43,7 +43,7 @@ docker run -d --name meilink-client \
   -e MEILINK_ADMIN_PASSWORD='use-a-long-random-password' \
   -v /path/on/nas/meilink-data:/data \
   --restart unless-stopped \
-  meilink-client:1.1.0
+  meilink-client:latest
 ```
 
 Open `http://NAS-IP:17420`, log in as `admin`, then save the frps connection
