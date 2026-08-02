@@ -88,14 +88,21 @@ func NewManager(cfgDir string) (*Manager, error) {
 		cancel:   cancel,
 	}
 
-	dl := frpc.NewDownloader()
-	// 使用配置管理器的实际数据目录（macOS 上可能是 Application Support）
-	dataDir := filepath.Dir(m.cfg.FrpcConfigPath())
-	binPath, err := dl.EnsureFrpc(dataDir)
-	if err != nil {
-		log.Printf("warning: could not ensure frpc binary: %v", err)
+	// Desktop bundles pass the exact frpc path through MEILINK_FRPC_BIN. Use
+	// it before the legacy download fallback so saving settings never depends
+	// on GitHub access (particularly important for packaged Windows builds).
+	if bundledPath := frpc.ResolveBinPath(); bundledPath != "" {
+		m.frpc = frpc.NewProcess(bundledPath)
 	} else {
-		m.frpc = frpc.NewProcess(binPath)
+		dl := frpc.NewDownloader()
+		// 使用配置管理器的实际数据目录（macOS 上可能是 Application Support）
+		dataDir := filepath.Dir(m.cfg.FrpcConfigPath())
+		binPath, err := dl.EnsureFrpc(dataDir)
+		if err != nil {
+			log.Printf("warning: could not ensure frpc binary: %v", err)
+		} else {
+			m.frpc = frpc.NewProcess(binPath)
+		}
 	}
 
 	// Wire frpc process callbacks. OnTermination triggers automatic recovery

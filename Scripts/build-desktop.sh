@@ -56,6 +56,32 @@ CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" \
 echo "  ✓ sidecar: $SIDECAR_NAME"
 echo ""
 
+# --- 1a. Download the matching frpc binary as a bundled application resource ---
+# The desktop app passes this file to the Go sidecar explicitly via
+# MEILINK_FRPC_BIN. It must be present in the installer so first-run setup
+# and saving settings do not depend on an internet connection.
+FRP_VERSION="${FRP_VERSION:-v0.70.0}"
+FRPC_RESOURCE_DIR="$DESKTOP_DIR/src-tauri/resources"
+FRPC_RESOURCE="$FRPC_RESOURCE_DIR/frpc.exe"
+FRPC_ARCHIVE_EXT=".tar.gz"
+[ "$GOOS" = "windows" ] && FRPC_ARCHIVE_EXT=".zip"
+FRPC_ARCHIVE="frp_${FRP_VERSION#v}_${GOOS}_${GOARCH}${FRPC_ARCHIVE_EXT}"
+FRPC_URL="https://github.com/fatedier/frp/releases/download/${FRP_VERSION}/${FRPC_ARCHIVE}"
+FRPC_TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$FRPC_TMP_DIR"' EXIT
+
+echo ">>> Downloading bundled frpc ${FRP_VERSION}..."
+mkdir -p "$FRPC_RESOURCE_DIR"
+curl --fail --location --retry 3 "$FRPC_URL" -o "$FRPC_TMP_DIR/$FRPC_ARCHIVE"
+if [ "$GOOS" = "windows" ]; then
+    unzip -p "$FRPC_TMP_DIR/$FRPC_ARCHIVE" "*/frpc.exe" > "$FRPC_RESOURCE"
+else
+    tar -xOf "$FRPC_TMP_DIR/$FRPC_ARCHIVE" --wildcards "*/frpc" > "$FRPC_RESOURCE"
+fi
+chmod +x "$FRPC_RESOURCE"
+echo "  frpc resource: $FRPC_RESOURCE"
+echo ""
+
 # --- 2. npm install + frontend build ---
 echo ">>> Building frontend..."
 cd "$DESKTOP_DIR"

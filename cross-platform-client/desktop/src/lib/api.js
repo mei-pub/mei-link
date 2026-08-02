@@ -16,6 +16,7 @@
 
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
+import { waitForApiReady } from "./sidecar-ready.js";
 export { STATUS_LABELS, normalizeStatus, tunnelStatus, normalizeSubdomain, routeText, canOpen, overallStatus, esc } from "./display.js";
 
 function hasTauriInternals() {
@@ -47,50 +48,47 @@ function _listen(event, handler) {
 let apiBase = "";
 let readyCallbacks = [];
 let ready = false;
+let readyError = null;
+const REQUEST_TIMEOUT_MS = 15_000;
 
-// Try to get the API URL. Polls invoke("get_api_url") every 500ms until the
-// sidecar is ready, and also listens for the sidecar-ready event.
+function markApiReady(url) {
+  if (!url || ready) return;
+  apiBase = url;
+  ready = true;
+  readyError = null;
+  if (typeof window !== "undefined") {
+    window.__MEILINK_API_BASE__ = apiBase;
+    window.__MEILINK_API_READY__ = true;
+  }
+  const callbacks = readyCallbacks.splice(0);
+  callbacks.forEach(({ resolve }) => resolve(apiBase));
+}
+
+function markApiUnavailable(error) {
+  if (ready || readyError) return;
+  readyError = error;
+  const callbacks = readyCallbacks.splice(0);
+  callbacks.forEach(({ reject }) => reject(error));
+}
+
+// Listen for sidecar-ready first, then poll the command/injected URL with a
+// bounded retry budget. A missing sidecar must reject so button busy states
+// can recover instead of waiting indefinitely.
 async function initApi() {
-  // Listen for the sidecar-ready event first (to avoid missing it).
-  // It's fine if this rejects (e.g. in a plain browser); we also poll below.
   try {
-    await _listen("sidecar-ready", (event) => {
-      apiBase = event.payload;
-      if (apiBase && !ready) {
-        ready = true;
-        if (typeof window !== "undefined") {
-          window.__MEILINK_API_BASE__ = apiBase;
-          window.__MEILINK_API_READY__ = true;
-        }
-        readyCallbacks.forEach((cb) => cb(apiBase));
-      }
-    });
-  } catch (e) { /* not in tauri context */ }
+    await _listen("sidecar-ready", (event) => markApiReady(event.payload));
+  } catch (_) { /* not in tauri context */ }
 
-  // Poll get_api_url until it returns a non-empty value. We retry for up to
-  // 60s (120 * 500ms) so late sidecar startup is covered. Also checks
-  // window.__MEILINK_API_BASE__ (injected by Rust via webview.eval) as a
-  // belt-and-suspenders fallback for when Tauri internals aren't ready.
-  for (let i = 0; i < 120; i++) {
-    try {
-      // Fallback 1: Rust injects this via webview.eval after sidecar ready.
-      if (!apiBase && typeof window !== "undefined" && window.__MEILINK_API_BASE__) {
-        apiBase = window.__MEILINK_API_BASE__;
-      }
-      if (!apiBase) {
-        apiBase = await _invoke("get_api_url");
-      }
-      if (apiBase) {
-        ready = true;
-        if (typeof window !== "undefined") {
-          window.__MEILINK_API_BASE__ = apiBase;
-          window.__MEILINK_API_READY__ = true;
-        }
-        readyCallbacks.forEach((cb) => cb(apiBase));
-        return;
-      }
-    } catch (e) {}
-    await new Promise((r) => setTimeout(r, 500));
+  try {
+    const url = await waitForApiReady({
+      getApiUrl: () => _invoke("get_api_url"),
+      getInjectedApiUrl: () => (
+        typeof window !== "undefined" ? window.__MEILINK_API_BASE__ || "" : ""
+      ),
+    });
+    markApiReady(url);
+  } catch (error) {
+    markApiUnavailable(error);
   }
 }
 
@@ -99,19 +97,33 @@ initApi();
 /** Returns a promise that resolves with the API base URL once the sidecar is up. */
 export function onReady() {
   if (ready) return Promise.resolve(apiBase);
-  return new Promise((resolve) => {
-    readyCallbacks.push(resolve);
+  if (readyError) return Promise.reject(readyError);
+  return new Promise((resolve, reject) => {
+    readyCallbacks.push({ resolve, reject });
   });
 }
 
 /** Wait for sidecar before making the call. */
 async function req(path, options) {
   if (!ready) await onReady();
-  const res = await fetch(`${apiBase}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-    body: options && options.body ? JSON.stringify(options.body) : undefined,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${apiBase}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      ...options,
+      body: options && options.body ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("\u8bf7\u6c42\u672c\u5730\u670d\u52a1\u8d85\u65f6\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || res.statusText);
@@ -127,7 +139,6 @@ async function req(path, options) {
   if (!text) return null;
   return JSON.parse(text);
 }
-
 export const api = {
   getStatus: () => req("/api/status"),
   getServerConfig: () => req("/api/server-config"),

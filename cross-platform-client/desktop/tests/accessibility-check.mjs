@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("../src/", import.meta.url);
+const root = fileURLToPath(new URL("../src/", import.meta.url));
 
 const checks = [
   ["main.html", "connBtn", "连接"],
@@ -17,8 +18,7 @@ const checks = [
   ["popover.html", "btnRestart", "重启"],
   ["popover.html", "btnQuit", "退出"],
   ["settings.html", "saveBtn", "保存"],
-  ["settings.html", "saveRestartBtn", "保存并重启"],
-  ["settings.html", "closeBtn", "关闭"],
+  ["settings.html", "cancelBtn", "\u53d6\u6d88"],
   ["tunnel-edit.html", "saveBtn", "创建"],
   ["tunnel-edit.html", "cancelBtn", "取消"],
 ];
@@ -26,7 +26,7 @@ const checks = [
 let failures = 0;
 
 for (const [file, id, label] of checks) {
-  const html = readFileSync(join(root.pathname, file), "utf8");
+  const html = readFileSync(join(root, file), "utf8");
   const pattern = new RegExp(`<button[^>]*id=["']${id}["'][^>]*>`, "s");
   const match = html.match(pattern);
   if (!match) {

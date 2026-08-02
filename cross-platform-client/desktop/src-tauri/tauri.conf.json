@@ -95,6 +95,9 @@
       "icons/icon.ico"
     ],
     "externalBin": ["binaries/meilink"],
+    "resources": {
+      "resources/frpc.exe": "frpc.exe"
+    },
     "macOS": {
       "infoPlist": "Info.plist"
     }
