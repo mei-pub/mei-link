@@ -227,6 +227,13 @@
 - **实现**：<kfile name="docker-compose.yml" path="docker-compose.yml">docker-compose.yml</kfile>
 - **镜像**：`snowdreamtech/frps:latest`，挂载 `./frps.toml`，暴露 7000 / 8080 / 8443。
 
+### F9.4 Docker 服务端管理页
+
+- **入口**：`cross-platform-client/server-docker/`。单一 `meilink-server:latest` 镜像同时运行 Node 管理页与 frps，适用于 NAS 的“导入镜像并创建容器”流程，不依赖 Docker Compose。
+- **认证**：`MEILINK_ADMIN_USER` 与 `MEILINK_ADMIN_PASSWORD` 为必填环境变量。账号密码不持久化到 `/data`，容器重启后仍以环境变量为准。
+- **能力**：管理 `bindPort`、HTTP/HTTPS vhost 端口、FRP Token、运行状态与日志；保存配置会原子写入 `/data/frps.toml` 并重启 frps。
+- **多域名**：frps 仅允许一个 `subDomainHost`，故服务端保存一个主域名和任意数量的额外域名/泛域名目录。主域名使用客户端 `subdomain`；额外域名和泛域名使用 HTTP/HTTPS 隧道的 `customDomains`。额外域名不得位于主域名的子域名空间内。
+
 ## F10 · 构建与发布
 
 ### F10.1 macOS 原生客户端构建
