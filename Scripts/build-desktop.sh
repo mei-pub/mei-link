@@ -27,6 +27,8 @@ CLIENT_DIR="$ROOT_DIR/cross-platform-client"
 DESKTOP_DIR="$CLIENT_DIR/desktop"
 COPY_TO_RELEASE=false
 
+source "$ROOT_DIR/Scripts/lib/frpc-archive.sh"
+
 [ "$1" = "--copy" ] && COPY_TO_RELEASE=true
 
 # --- 确定 Go sidecar 的 target-triple 后缀 ---
@@ -76,7 +78,7 @@ curl --fail --location --retry 3 "$FRPC_URL" -o "$FRPC_TMP_DIR/$FRPC_ARCHIVE"
 if [ "$GOOS" = "windows" ]; then
     unzip -p "$FRPC_TMP_DIR/$FRPC_ARCHIVE" "*/frpc.exe" > "$FRPC_RESOURCE"
 else
-    tar -xOf "$FRPC_TMP_DIR/$FRPC_ARCHIVE" --wildcards "*/frpc" > "$FRPC_RESOURCE"
+    extract_tar_member "$FRPC_TMP_DIR/$FRPC_ARCHIVE" "frpc" > "$FRPC_RESOURCE"
 fi
 chmod +x "$FRPC_RESOURCE"
 echo "  frpc resource: $FRPC_RESOURCE"
