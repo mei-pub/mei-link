@@ -9,12 +9,17 @@ RUN set -eux; \
       arm64) FRP_SHA256=9dd282fd8d1b90a8ee760702ac5b876748b519c6bdfac7c68418f62a05d805c6 ;; \
       *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    apk add --no-cache curl tar; \
+    apk add --no-cache curl tar libcap; \
     curl --fail --location --show-error --silent --retry 5 --retry-all-errors --retry-delay 2 -o /tmp/frp.tgz "https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_${TARGETARCH}.tar.gz"; \
     echo "${FRP_SHA256}  /tmp/frp.tgz" | sha256sum -c -; \
     tar -xzf /tmp/frp.tgz --strip-components=1 -C /usr/local/bin "frp_${FRP_VERSION}_linux_${TARGETARCH}/frps"; \
     rm /tmp/frp.tgz; \
-    frps --version
+    # 授予 frps 绑定特权端口（< 1024）的能力。file capability 写在二进制 xattr 上，
+    # 任何用户 exec 该文件都会获得此 capability，因此 frps 以非 root 的 meilink 用户
+    # 运行时也能 bind 80/443。Docker 默认 bounding set 含 NET_BIND_SERVICE，不会被拦截。
+    setcap 'cap_net_bind_service=+ep' /usr/local/bin/frps; \
+    frps --version; \
+    getcap /usr/local/bin/frps
 
 WORKDIR /app
 COPY src ./src

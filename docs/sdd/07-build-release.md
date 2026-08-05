@@ -165,6 +165,8 @@ docker compose up -d
 
 > 另有 `server/docker-managed/` 自构建的「frps + Web 管理页」一体镜像方案。
 > 两套 Docker 方案的完整部署手册见 [../guides/deploy-docker.md](../guides/deploy-docker.md)。
+>
+> docker-managed 镜像对 `/usr/local/bin/frps` 设置了 `cap_net_bind_service=+ep`（file capability），frps 以非 root 用户 `meilink` 运行但可绑定 < 1024 的特权端口（80/443）。host 网络模式下管理页直接填 80 即生效；bridge 模式下还需在 compose 映射对应端口。修改此机制需同步 `server/docker-managed/Dockerfile`（setcap）与 README「特权端口」小节。
 
 ## 7. 开发辅助脚本
 

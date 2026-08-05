@@ -33,6 +33,18 @@ docker compose logs -f meilink-server
 docker compose -f docker-compose.host.yml up -d
 ```
 
+## 特权端口（80/443）
+
+镜像已对 `/usr/local/bin/frps` 设置 `cap_net_bind_service=+ep`（file capability）。frps 虽以非 root 的 `meilink` 用户运行，但能绑定 < 1024 的特权端口。
+
+- **host 模式**：管理页直接把 HTTP 端口填 `80`、HTTPS 填 `443`，保存即生效，无需 Nginx 或其他前置反代。
+- **bridge 模式**：frps 能 bind 容器内的 80，但默认 `docker-compose.yml` 只映射了 `8080:8080`。要对外用 80，需把映射改成 `80:80`（此时宿主机 80 不能被其他进程占用），或改用 host 模式。
+- **升级须知**：此修复**之前**构建的旧镜像没有 setcap，必须重建镜像才生效，仅 `restart` / `up -d`（不重建）无效：
+  ```bash
+  docker compose -f docker-compose.host.yml build && docker compose -f docker-compose.host.yml up -d
+  ```
+- 若你在 compose 显式写了 `cap_drop: [ALL]`，或 NAS 平台默认 drop 了 `NET_BIND_SERVICE`，file capability 会失效。本仓库两份 compose 均无 `cap_drop`，默认不受影响。
+
 ## NAS / Docker 直接运行（不依赖 compose）
 
 ```bash

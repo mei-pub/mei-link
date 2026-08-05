@@ -33,6 +33,17 @@ function renderLogs(events) {
   events.forEach((event) => { const line = document.createElement("div"); line.className = `log ${event.level || "info"}`; const time = document.createElement("time"); time.textContent = new Date(event.time).toLocaleString(); line.append(time, document.createTextNode(event.message)); box.append(line); });
 }
 
+// 提示特权端口（< 1024）。镜像已给 frps 设置 CAP_NET_BIND_SERVICE，host 模式下可正常绑定；
+// bridge 模式下还需在 compose 映射对应端口。此处仅提示，不阻止保存。
+function updatePortNotice() {
+  const notice = document.querySelector("#portNotice");
+  const low = ["bindPort", "vhostHTTPPort", "vhostHTTPSPort"]
+    .filter((name) => Number(form[name].value) > 0 && Number(form[name].value) < 1024);
+  if (!low.length) { notice.textContent = ""; return; }
+  notice.style.color = "#b07b00";
+  notice.textContent = `端口 ${low.join("、")} < 1024 为特权端口，依赖镜像内置的 CAP_NET_BIND_SERVICE（已构建版本自动满足）；bridge 模式下还需在 compose 映射对应端口。`;
+}
+
 async function refresh() {
   const [config, status, events] = await Promise.all([request("/api/config"), request("/api/status"), request("/api/events")]);
   form.bindPort.value = config.bindPort; form.vhostHTTPPort.value = config.vhostHTTPPort; form.vhostHTTPSPort.value = config.vhostHTTPSPort; form.authToken.value = config.authToken;
@@ -42,10 +53,12 @@ async function refresh() {
   document.querySelector("#statusDot").className = `dot ${status.running ? "running" : ""}`;
   document.querySelector("#statusText").textContent = status.running ? `frps 正在运行（PID ${status.pid || "-"}）` : status.lastError || "frps 未运行";
   renderLogs(events);
+  updatePortNotice();
 }
 
 document.querySelector("#loginForm").onsubmit = async (event) => { event.preventDefault(); try { await request("/api/login", { method: "POST", body: JSON.stringify({ user: document.querySelector("#user").value, password: document.querySelector("#password").value }) }); loginView.classList.add("hidden"); appView.classList.remove("hidden"); await refresh(); } catch (error) { document.querySelector("#loginError").textContent = error.message; } };
 document.querySelector("#addDomain").onclick = () => addDomain();
+["bindPort", "vhostHTTPPort", "vhostHTTPSPort"].forEach((name) => form[name].addEventListener("input", updatePortNotice));
 form.onsubmit = async (event) => { event.preventDefault(); const notice = document.querySelector("#saveNotice"); try { await request("/api/config", { method: "POST", body: JSON.stringify({ bindPort: Number(form.bindPort.value), vhostHTTPPort: Number(form.vhostHTTPPort.value), vhostHTTPSPort: Number(form.vhostHTTPSPort.value), authToken: form.authToken.value, domains: domains() }) }); notice.style.color = "#1b9762"; notice.textContent = "已保存并重启 frps"; await refresh(); } catch (error) { notice.style.color = "#c33d4c"; notice.textContent = error.message; } };
 document.querySelector("#restartFrps").onclick = async () => { await request("/api/control/restart", { method: "POST" }); await refresh(); };
 document.querySelector("#refresh").onclick = refresh;
