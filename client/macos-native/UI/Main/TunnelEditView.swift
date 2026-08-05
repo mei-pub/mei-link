@@ -12,11 +12,31 @@ struct TunnelEditView: View {
     @State private var localPort = "8080"
     @State private var localIP = "127.0.0.1"
     @State private var subdomain = ""
+    @State private var customDomainsText = ""
     @State private var remotePort = ""
     @State private var enabled = true
     @State private var isSaving = false
 
+    // 域名目录拉取（仅 HTTP/HTTPS）
+    @State private var domains: [DomainEntry] = []
+    @State private var selectedDomainID: String? = nil
+    @State private var domainPrefix = ""
+    @State private var domainFetchError: String? = nil
+    @State private var isFetchingDomains = false
+
+    /// 拉取成功且选了基域时为 true，走「选基域+前缀」交互；否则 fallback 到手填。
+    private var useDomainDirectory: Bool { !domains.isEmpty && selectedDomainID != nil }
+
     var isEditing: Bool { tunnel != nil }
+
+    private var selectedDomain: DomainEntry? { domains.first { $0.id == selectedDomainID } }
+
+    /// 实时预览的访问域名（选基域+前缀模式下）。
+    private var domainPreview: String? {
+        guard let entry = selectedDomain else { return nil }
+        let prefix = domainPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        return prefix.isEmpty ? entry.hostPart : "\(prefix).\(entry.hostPart)"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,10 +74,7 @@ struct TunnelEditView: View {
 
                     formSection("远程配置") {
                         if type == .http || type == .https {
-                            formRow("子域名") {
-                                TextField("例如 admin", text: $subdomain)
-                                    .textFieldStyle(.roundedBorder)
-                            }
+                            domainSection
                         } else {
                             formRow("远程端口") {
                                 TextField("留空自动分配", text: $remotePort)
@@ -93,8 +110,124 @@ struct TunnelEditView: View {
                 localPort = String(tunnel.localPort)
                 localIP = tunnel.localIP
                 subdomain = tunnel.subdomain ?? ""
+                customDomainsText = tunnel.customDomains.joined(separator: ",")
                 remotePort = tunnel.remotePort.map { String($0) } ?? ""
                 enabled = tunnel.enabled
+            }
+            fetchDomains()
+        }
+    }
+
+    /// 拉取服务端域名目录。成功则进入「选基域+前缀」模式并尝试回填；
+    /// 失败则保持 fallback 手填模式。非 HTTP/HTTPS 类型跳过（用不到）。
+    private func fetchDomains() {
+        guard type == .http || type == .https else { return }
+        let config = manager.serverConfig
+        guard let mgmtURL = config?.managementURL, !mgmtURL.isEmpty,
+              let token = config?.domainAPIToken, !token.isEmpty else {
+            // 未配置管理页，走 fallback，不报错
+            return
+        }
+        isFetchingDomains = true
+        Task {
+            do {
+                let fetched = try await DomainDirectory.fetch(managementURL: mgmtURL, token: token)
+                await MainActor.run {
+                    domains = fetched
+                    isFetchingDomains = false
+                    domainFetchError = nil
+                    prefillDomainSelection()
+                }
+            } catch {
+                await MainActor.run {
+                    domains = []
+                    isFetchingDomains = false
+                    domainFetchError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// 编辑已有隧道时，根据其 subdomain/customDomains 反推应选中哪个基域 + 前缀。
+    /// 匹配不上则不选（保持 fallback 单独展示，但 domains 已有，会走 fallback 提示）。
+    private func prefillDomainSelection() {
+        guard let tunnel = tunnel else {
+            selectedDomainID = domains.first?.id
+            return
+        }
+        // 主域名模式：subdomain + 主域名基域 = 完整域名
+        if let sub = tunnel.subdomain, !sub.isEmpty {
+            if let entry = domains.first(where: { !$0.isWildcard }) {
+                selectedDomainID = entry.id
+                domainPrefix = sub
+                return
+            }
+        }
+        // 泛域名模式：customDomains[0] 去掉前缀 = 泛域名基域 hostPart
+        if let firstCustom = tunnel.customDomains.first {
+            for entry in domains where entry.isWildcard {
+                if firstCustom.hasSuffix(".\(entry.hostPart)") {
+                    let prefix = String(firstCustom.dropLast(".\(entry.hostPart)".count))
+                    selectedDomainID = entry.id
+                    domainPrefix = prefix
+                    return
+                }
+            }
+        }
+        // 都匹配不上：清空选择，走 fallback（domains 非空但未选中）
+        selectedDomainID = nil
+    }
+
+    /// HTTP/HTTPS 隧道的域名配置区块。
+    /// 拉取成功（有域名目录且选中基域）→ 「基域下拉 + 前缀 + 预览」；
+    /// 否则 fallback 到手填（子域名 + 自定义域名）。
+    private var domainSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if useDomainDirectory {
+                formRow("基域") {
+                    Picker("基域", selection: $selectedDomainID) {
+                        ForEach(domains) { d in
+                            Text("\(d.domain)").tag(Optional(d.id))
+                        }
+                    }
+                    .labelsHidden()
+                }
+                formRow("前缀") {
+                    TextField("例如 admin", text: $domainPrefix)
+                        .textFieldStyle(.roundedBorder)
+                }
+                if let preview = domainPreview {
+                    HStack {
+                        Spacer()
+                        Text("访问地址：\(type == .https ? "https://" : "http://")\(preview)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(height: 32)
+                    .overlay(alignment: .bottom) { Divider().padding(.leading, 108).opacity(0.7) }
+                }
+            } else {
+                if let error = domainFetchError {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                            .font(.caption)
+                        Text("\(error)，改为手动填写")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .frame(height: 40)
+                    .overlay(alignment: .bottom) { Divider().padding(.leading, 108).opacity(0.7) }
+                }
+                formRow("子域名") {
+                    TextField("例如 admin（依赖服务端主域名）", text: $subdomain)
+                        .textFieldStyle(.roundedBorder)
+                }
+                formRow("自定义域名") {
+                    TextField("多个用逗号分隔，如 a.com,b.com", text: $customDomainsText)
+                        .textFieldStyle(.roundedBorder)
+                }
             }
         }
     }
@@ -169,17 +302,22 @@ struct TunnelEditView: View {
         guard let port = Int(localPort) else { return }
 
         let remoteP = Int(remotePort)
-        let subdomainVal = SubdomainNormalizer.normalize(
-            subdomain,
-            baseHost: manager.serverConfig?.subDomainHost
-        )
+
+        // 根据域名配置模式算出最终的 subdomain / customDomains
+        let resolved: (subdomain: String?, customDomains: [String])
+        if type == .http || type == .https {
+            resolved = resolveDomains()
+        } else {
+            resolved = (nil, [])
+        }
 
         if var existing = tunnel {
             existing.name = name
             existing.type = type
             existing.localPort = port
             existing.localIP = localIP
-            existing.subdomain = subdomainVal
+            existing.subdomain = resolved.subdomain
+            existing.customDomains = resolved.customDomains
             existing.remotePort = remoteP
             existing.enabled = enabled
             existing.updatedAt = Date()
@@ -196,8 +334,9 @@ struct TunnelEditView: View {
                 type: type,
                 localPort: port,
                 localIP: localIP,
-                subdomain: subdomainVal,
+                subdomain: resolved.subdomain,
                 remotePort: remoteP,
+                customDomains: resolved.customDomains,
                 enabled: enabled
             )
 
@@ -208,6 +347,31 @@ struct TunnelEditView: View {
                 close()
             }
         }
+    }
+
+    /// 把 UI 状态解析成 frp 要的 subdomain / customDomains。
+    /// - 拉取模式（选中基域）：主域名 → subdomain=前缀；泛域名 → customDomains=[前缀.基域]
+    /// - fallback 模式：subdomain 走 SubdomainNormalizer；customDomains 按逗号切分
+    private func resolveDomains() -> (subdomain: String?, customDomains: [String]) {
+        if useDomainDirectory, let entry = selectedDomain {
+            let prefix = domainPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
+            if entry.isWildcard {
+                return (nil, [entry.combined(prefix: prefix)])
+            } else {
+                let normalized = SubdomainNormalizer.normalize(prefix, baseHost: manager.serverConfig?.subDomainHost)
+                return (normalized, [])
+            }
+        }
+        // fallback
+        let subdomainVal = SubdomainNormalizer.normalize(
+            subdomain,
+            baseHost: manager.serverConfig?.subDomainHost
+        )
+        let customs = customDomainsText
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return (subdomainVal, customs)
     }
 
     private func close() {

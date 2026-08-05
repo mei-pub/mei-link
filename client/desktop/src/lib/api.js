@@ -158,6 +158,7 @@ export const api = {
   clearEvents: () => req("/api/events", { method: "DELETE" }),
   getSettings: () => req("/api/settings"),
   saveSettings: (s) => req("/api/settings", { method: "POST", body: s }),
+  getDomains: () => req("/api/domains"),
 };
 
 /** Open another window via the Rust command. */

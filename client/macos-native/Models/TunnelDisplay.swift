@@ -40,6 +40,9 @@ extension Tunnel {
     }
 
     private func hostName(serverConfig: ServerConfig?) -> String? {
+        // 自定义域名优先（用户主动填的完整域名更重要）
+        if let first = customDomains.first, !first.isEmpty { return first }
+
         guard let normalized = SubdomainNormalizer.normalize(
             subdomain,
             baseHost: serverConfig?.subDomainHost

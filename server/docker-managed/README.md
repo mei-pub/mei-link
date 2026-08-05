@@ -77,3 +77,4 @@ frp 只支持一个 `subDomainHost`。因此，不能把 `*.tunnel.example.com` 
 | `MEILINK_FRPS_HTTP_PORT` | 否 | HTTP vhost 端口，默认 `8080` |
 | `MEILINK_FRPS_HTTPS_PORT` | 否 | HTTPS vhost 端口，默认 `8443` |
 | `MEILINK_PRIMARY_DOMAIN` | 否 | 首次启动时的主域名 |
+| `MEILINK_DOMAIN_API_TOKEN` | 否 | 配置后启用 `GET /api/domains`（供客户端拉取域名目录，简化隧道编辑）。客户端用 Bearer token 访问，独立于管理页登录账号 |

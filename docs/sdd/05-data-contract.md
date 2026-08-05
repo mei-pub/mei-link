@@ -69,6 +69,8 @@
 | `adminPort` | Int | 7400 | frpc Admin API 端口 |
 | `adminUser` | String | `admin` | Admin API Basic Auth user |
 | `adminPassword` | String | `admin` | Admin API Basic Auth password |
+| `managementURL` | String | `""` | 服务端管理页地址（如 `http://vps:17500`），用于拉取域名目录；与 frps 连接无关，留空则隧道编辑走手填模式 |
+| `domainAPIToken` | String | `""` | 拉取 `GET /api/domains` 的 Bearer token（对应服务端 `MEILINK_DOMAIN_API_TOKEN`），与管理页登录账号独立 |
 
 > **注意**：`authToken` 同时被写入 Keychain（见 §5）。`config.json` 里的 token 与 Keychain 里的 token 是同一份，但跨平台实现要能从 `config.json` 直接读到 token（因为不是所有平台都有 Keychain）。
 
@@ -225,6 +227,7 @@ baseURL: `http://127.0.0.1:<adminPort>`，Basic Auth。
 | POST | `/api/control/{start,stop,restart}` | 控制 frpc 生命周期 |
 | GET / DELETE | `/api/events` | 读取 / 清空事件日志 |
 | GET / POST | `/api/settings` | 读取 / 保存 `AppSettings` |
+| GET | `/api/domains` | 代理拉取服务端管理页域名目录（用 `ServerConfig.managementURL` + `domainAPIToken`）。返回 `{domains: [...], error?: "..."}`，失败时 domains 为空、error 非空，前端据此 fallback 到手填 |
 
 ### 8A.2 `/api/test-connection` 契约
 - body: `{"addr": "tunnel.example.com", "port": 7000}`

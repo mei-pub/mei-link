@@ -23,6 +23,12 @@ type ServerConfig struct {
 	AdminPort     int    `json:"adminPort"`
 	AdminUser     string `json:"adminUser"`
 	AdminPassword string `json:"adminPassword"`
+	// ManagementURL 是服务端管理页地址（如 http://vps:17500），用于拉取域名目录。
+	// 与 frps 连接无关；留空则隧道编辑走手填模式。
+	ManagementURL string `json:"managementURL"`
+	// DomainAPIToken 是拉取 GET /api/domains 用的 Bearer token
+	// （对应服务端 MEILINK_DOMAIN_API_TOKEN），与管理页登录账号独立。留空则不拉取。
+	DomainAPIToken string `json:"domainAPIToken"`
 }
 
 // TunnelType represents a tunnel proxy type.

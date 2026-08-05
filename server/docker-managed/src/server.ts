@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { EnvironmentAuth } from "./auth.ts";
+import { EnvironmentAuth, DomainApiToken } from "./auth.ts";
 import { ServerManager, type FrpsController } from "./manager.ts";
 import type { ServerConfig } from "./config.ts";
 
@@ -34,6 +34,7 @@ async function sendFile(response: ServerResponse, path: string, contentType: str
 export async function createManagementServer(options: ServerOptions = {}): Promise<Server> {
   const environment = options.environment || process.env;
   const auth = new EnvironmentAuth(environment);
+  const domainApiToken = new DomainApiToken(environment);
   const manager = new ServerManager({ dataDir: options.dataDir, environment, controller: options.controller });
   const webDir = options.webDir || join(import.meta.dirname, "../web");
   await manager.load();
@@ -42,6 +43,15 @@ export async function createManagementServer(options: ServerOptions = {}): Promi
     try {
       const url = new URL(request.url || "/", "http://localhost");
       if (url.pathname === "/healthz") return json(response, 200, { ok: true });
+      // /api/domains：供客户端拉取域名目录（用于隧道编辑「选基域+填前缀」交互）。
+      // 独立 Bearer token 认证（MEILINK_DOMAIN_API_TOKEN），不走管理页登录会话。
+      // 未配置 token 时端点禁用（404），只返回 enabled 域名，不含敏感信息。
+      if (url.pathname === "/api/domains" && request.method === "GET") {
+        if (!domainApiToken.configured) return json(response, 404, { error: "域名目录接口未启用" });
+        if (!domainApiToken.valid(request.headers.authorization || "")) return json(response, 401, { error: "token 无效" });
+        const domains = manager.currentConfig().domains.filter((d) => d.enabled).map((d) => ({ domain: d.domain, kind: d.kind }));
+        return json(response, 200, { domains });
+      }
       if (url.pathname === "/api/login" && request.method === "POST") {
         const input = await body(request);
         const token = auth.login(String(input.user || ""), String(input.password || ""));

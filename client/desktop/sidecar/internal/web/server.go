@@ -41,6 +41,7 @@ func (s *Server) buildMux() http.Handler {
 	mux.HandleFunc("/api/control/", s.handleControl)
 	mux.HandleFunc("/api/events", s.handleEvents)
 	mux.HandleFunc("/api/settings", s.handleSettings)
+	mux.HandleFunc("/api/domains", s.handleDomains)
 	// Wrap the mux in a CORS middleware. The sidecar listens on 127.0.0.1 only,
 	// so cross-origin access from the Tauri webview (tauri://) or the Vite dev
 	// server (http://localhost:17420) needs explicit CORS headers. Without
@@ -354,6 +355,29 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", 405)
 	}
+}
+
+// handleDomains 代理客户端到服务端管理页的域名目录拉取。
+// 读 server config 的 managementURL + domainAPIToken，调 tunnel.FetchDomains。
+// 前端 GET /api/domains 调用此端点，不用知道管理页地址/token（由 sidecar 持有）。
+// 失败返回 200 + {domains: [], error: "..."}，前端据 error 字段 fallback 到手填。
+func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	cfg, err := s.cfg.LoadServerConfig()
+	if err != nil || cfg == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"domains": []interface{}{}, "error": "未配置服务器"})
+		return
+	}
+	domains, err := tunnel.FetchDomains(cfg.ManagementURL, cfg.DomainAPIToken)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"domains": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"domains": domains})
 }
 
 func formatSeconds(v float64) string {

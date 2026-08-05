@@ -9,6 +9,8 @@ struct SetupView: View {
     @State private var authToken = ""
     @State private var subDomainHost = ""
     @State private var tlsEnabled = true
+    @State private var managementURL = ""
+    @State private var domainAPIToken = ""
     @State private var isTesting = false
     @State private var testResult: String?
     @State private var testSuccess = false
@@ -43,6 +45,19 @@ struct SetupView: View {
                         .textFieldStyle(.roundedBorder)
 
                     Text("需在 DNS 添加泛解析: *.\(subDomainHost.isEmpty ? "tunnel.example.com" : subDomainHost) → VPS IP")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Section("管理页（可选）") {
+                    TextField("管理页地址 (如 http://vps:17500)", text: $managementURL)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+
+                    SecureField("域名拉取 Token", text: $domainAPIToken)
+                        .textFieldStyle(.roundedBorder)
+
+                    Text("配置后，编辑 HTTP/HTTPS 隧道时可从服务端拉取域名目录，自动适配子域名/泛域名。不填则隧道编辑走手填模式。")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -84,6 +99,17 @@ struct SetupView: View {
         }
         .padding(24)
         .frame(width: 480)
+        .onAppear {
+            // 已有配置时回填，方便修改
+            guard let config = manager.serverConfig, !config.serverAddr.isEmpty else { return }
+            serverAddr = config.serverAddr
+            serverPort = String(config.serverPort)
+            authToken = config.authToken
+            subDomainHost = config.subDomainHost
+            tlsEnabled = config.tlsEnabled
+            managementURL = config.managementURL
+            domainAPIToken = config.domainAPIToken
+        }
     }
 
     private func testConnection() {
@@ -118,7 +144,9 @@ struct SetupView: View {
             serverPort: port,
             authToken: authToken,
             subDomainHost: subDomainHost,
-            tlsEnabled: tlsEnabled
+            tlsEnabled: tlsEnabled,
+            managementURL: managementURL,
+            domainAPIToken: domainAPIToken
         )
 
         do {

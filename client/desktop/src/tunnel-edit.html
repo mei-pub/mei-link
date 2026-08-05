@@ -78,8 +78,21 @@
     </div>
     <div class="section-card">
       <h3>远程配置</h3>
-      <div id="subdomainGroup" class="form-group"><label>子域名</label><input id="subdomain" class="form-input" placeholder="例如 admin"></div>
+      <!-- TCP/UDP：远程端口 -->
       <div id="remotePortGroup" class="form-group" style="display:none"><label>远程端口</label><input id="remotePort" class="form-input" type="number" placeholder="留空自动分配"></div>
+      <!-- HTTP/HTTPS：域名配置。拉取成功显示 directoryGroup，失败显示 fallbackGroup -->
+      <div id="domainConfig">
+        <div id="directoryGroup" style="display:none">
+          <div class="form-group"><label>基域</label><select id="baseDomain" class="form-input"></select></div>
+          <div class="form-group"><label>前缀</label><input id="prefix" class="form-input" placeholder="例如 admin"></div>
+          <div class="form-group" id="domainPreview" style="font-size:12px;color:var(--text-secondary)"></div>
+        </div>
+        <div id="fallbackGroup" style="display:none">
+          <div class="form-group"><label>子域名</label><input id="subdomain" class="form-input" placeholder="例如 admin（依赖服务端主域名）"></div>
+          <div class="form-group"><label>自定义域名</label><input id="customDomains" class="form-input" placeholder="多个用逗号分隔，如 a.com,b.com"></div>
+          <div id="fallbackNotice" style="font-size:12px;color:var(--text-secondary)"></div>
+        </div>
+      </div>
     </div>
     <div class="section-card">
       <div class="toggle-row">
@@ -101,30 +114,133 @@
 import { api, closeWindow, autoFitWindow, onTunnelEditRequest, takeTunnelEditId } from "./lib/api.js";
 import { customAlert } from "./lib/dialog.js";
 let selectedType = "http"; let editId = null;
+let domains = [];          // 拉取到的域名目录
+let useDirectory = false;  // 是否走「选基域+前缀」模式
+let editingTunnel = null;  // 编辑模式下缓存的隧道对象，用于回填
 document.getElementById("cancelBtn").onclick = () => closeWindow();
+
 function selectType(type) {
   selectedType = type;
   document.querySelectorAll(".type-segments button").forEach(b => b.classList.toggle("active", b.dataset.type === type));
   const isHttp = type === "http" || type === "https";
-  document.getElementById("subdomainGroup").style.display = isHttp ? "block" : "none";
+  document.getElementById("domainConfig").style.display = isHttp ? "block" : "none";
   document.getElementById("remotePortGroup").style.display = isHttp ? "none" : "block";
   document.getElementById("formHint").textContent = isHttp ? "通过子域名发布本机 HTTP 服务" : "通过远程端口转发本机 TCP/UDP 服务";
+  if (isHttp) { renderDomainSection(); }
+  autoFitWindow();
 }
-document.querySelectorAll(".type-segments button").forEach(b => b.onclick = () => { selectType(b.dataset.type); autoFitWindow(); });
+document.querySelectorAll(".type-segments button").forEach(b => b.onclick = () => selectType(b.dataset.type));
 selectType("http");
-autoFitWindow();
+
+/// 把域名目录渲染成「基域下拉 + 前缀」；拉取失败则显示 fallback。
+function renderDomainSection() {
+  const dirGroup = document.getElementById("directoryGroup");
+  const fbGroup = document.getElementById("fallbackGroup");
+  const fbNotice = document.getElementById("fallbackNotice");
+  if (domains.length > 0) {
+    useDirectory = true;
+    dirGroup.style.display = "block";
+    fbGroup.style.display = "none";
+    const sel = document.getElementById("baseDomain");
+    sel.innerHTML = domains.map(d => `<option value="${d.domain}">${d.domain}（${d.kind === "wildcard" ? "泛域名" : "主域名"}）</option>`).join("");
+    // 回填：编辑已有隧道时，尝试匹配基域+前缀
+    if (editingTunnel) { prefillFromTunnel(editingTunnel); }
+    updatePreview();
+    sel.onchange = updatePreview;
+    document.getElementById("prefix").oninput = updatePreview;
+  } else {
+    useDirectory = false;
+    dirGroup.style.display = "none";
+    fbGroup.style.display = "block";
+    fbNotice.textContent = "";
+  }
+}
+
+function hostPart(domain) { return domain.startsWith("*.") ? domain.slice(2) : domain; }
+function combined(domain, prefix) { const h = hostPart(domain); return prefix ? `${prefix}.${h}` : h; }
+
+function updatePreview() {
+  const sel = document.getElementById("baseDomain");
+  const domain = sel.value;
+  const prefix = document.getElementById("prefix").value.trim();
+  const scheme = selectedType === "https" ? "https" : "http";
+  document.getElementById("domainPreview").textContent = domain ? `访问地址：${scheme}://${combined(domain, prefix)}` : "";
+}
+
+/// 编辑已有隧道时，根据 subdomain/customDomains 反推基域+前缀。
+function prefillFromTunnel(t) {
+  const sub = t.subdomain || (t.sub_domain);
+  const customs = t.customDomains || t.custom_domains || [];
+  // 主域名模式
+  if (sub) {
+    const primary = domains.find(d => d.kind !== "wildcard");
+    if (primary) { document.getElementById("baseDomain").value = primary.domain; document.getElementById("prefix").value = sub; return; }
+  }
+  // 泛域名模式
+  if (customs.length) {
+    const first = customs[0];
+    const wild = domains.find(d => d.kind === "wildcard" && first.endsWith("." + hostPart(d.domain)));
+    if (wild) {
+      document.getElementById("baseDomain").value = wild.domain;
+      document.getElementById("prefix").value = first.slice(0, -(hostPart(wild.domain).length + 1));
+      return;
+    }
+  }
+}
+
+/// 把 UI 状态解析成 frp 要的 subdomain / customDomains。
+function resolveDomains() {
+  if (useDirectory) {
+    const domain = document.getElementById("baseDomain").value;
+    const prefix = document.getElementById("prefix").value.trim();
+    const entry = domains.find(d => d.domain === domain);
+    if (!entry) return { subdomain: "", customDomains: [] };
+    if (entry.kind === "wildcard") return { subdomain: "", customDomains: [combined(domain, prefix)] };
+    return { subdomain: prefix, customDomains: [] };
+  }
+  // fallback
+  const sub = document.getElementById("subdomain").value.trim();
+  const cd = document.getElementById("customDomains").value.trim();
+  const customDomains = cd ? cd.split(",").map(s => s.trim()).filter(Boolean) : [];
+  return { subdomain: sub, customDomains };
+}
+
 document.getElementById("saveBtn").onclick = async () => {
   const name = document.getElementById("name").value.trim(); const localPort = parseInt(document.getElementById("localPort").value);
   if (!name || !localPort) { await customAlert("请填写名称和本地端口"); return; }
-  const tunnel = { name, type: selectedType, localIP: document.getElementById("localIP").value || "127.0.0.1", localPort, remotePort: parseInt(document.getElementById("remotePort").value) || 0, subdomain: document.getElementById("subdomain").value.trim(), enabled: document.getElementById("enabled").checked };
+  const isHttp = selectedType === "http" || selectedType === "https";
+  const resolved = isHttp ? resolveDomains() : { subdomain: "", customDomains: [] };
+  const tunnel = { name, type: selectedType, localIP: document.getElementById("localIP").value || "127.0.0.1", localPort, remotePort: parseInt(document.getElementById("remotePort").value) || 0, subdomain: resolved.subdomain, customDomains: resolved.customDomains, enabled: document.getElementById("enabled").checked };
   try { if (editId) { tunnel.id = editId; await api.updateTunnel(tunnel); } else { await api.addTunnel(tunnel); } closeWindow(); } catch(e) { await customAlert("保存失败: " + e.message); }
 };
 onTunnelEditRequest(() => window.location.reload()).catch(() => {});
+
 async function initializeEditContext() {
   const editTunnelId = await takeTunnelEditId().catch(() => new URLSearchParams(window.location.search).get("editTunnelId"));
-if (editTunnelId) { editId = editTunnelId; document.getElementById("formTitle").textContent = "编辑隧道"; document.getElementById("saveBtn").textContent = "保存"; document.getElementById("saveBtn").setAttribute("aria-label", "保存"); document.getElementById("saveBtn").title = "保存";
-  api.getTunnels().then(tunnels => { const t = tunnels.find(x => x.id === editId); if (!t) return; document.getElementById("name").value = t.name; document.getElementById("localPort").value = t.localPort; document.getElementById("localIP").value = t.localIP || "127.0.0.1"; document.getElementById("remotePort").value = t.remotePort || ""; document.getElementById("subdomain").value = t.subdomain || ""; document.getElementById("enabled").checked = t.enabled; selectType(t.type); autoFitWindow(); });
-}
+  if (editTunnelId) {
+    editId = editTunnelId; editingTunnel = await api.getTunnels().then(ts => ts.find(x => x.id === editId)).catch(() => null);
+    document.getElementById("formTitle").textContent = "编辑隧道";
+    document.getElementById("saveBtn").textContent = "保存";
+    document.getElementById("saveBtn").setAttribute("aria-label", "保存");
+    document.getElementById("saveBtn").title = "保存";
+    if (editingTunnel) {
+      document.getElementById("name").value = editingTunnel.name;
+      document.getElementById("localPort").value = editingTunnel.localPort;
+      document.getElementById("localIP").value = editingTunnel.localIP || editingTunnel.local_ip || "127.0.0.1";
+      document.getElementById("remotePort").value = editingTunnel.remotePort || editingTunnel.remote_port || "";
+      document.getElementById("subdomain").value = editingTunnel.subdomain || editingTunnel.sub_domain || "";
+      document.getElementById("customDomains").value = (editingTunnel.customDomains || editingTunnel.custom_domains || []).join(",");
+      document.getElementById("enabled").checked = editingTunnel.enabled;
+    }
+  }
+  // 拉取域名目录（无论新建/编辑，HTTP/HTTPS 才有用）
+  try {
+    const res = await api.getDomains();
+    if (res && res.domains && res.domains.length) { domains = res.domains; }
+    else if (res && res.error) { document.getElementById("fallbackNotice").textContent = res.error + "，改为手动填写"; }
+  } catch(e) { /* 拉取失败静默走 fallback */ }
+  if (editingTunnel) { selectType(editingTunnel.type || editingTunnel.Type || "http"); }
+  autoFitWindow();
 }
 void initializeEditContext();
 </script>

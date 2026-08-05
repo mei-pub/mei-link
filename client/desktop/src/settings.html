@@ -54,6 +54,8 @@
       </div>
       <div class="form-group"><label>认证 Token</label><div style="display:flex;gap:4px;align-items:center"><input id="token" class="form-input" type="password" style="flex:1;min-width:0"><button class="btn btn-sm" id="tokenEye" aria-label="显示或隐藏 Token" title="显示或隐藏 Token" style="flex-shrink:0;padding:5px 8px"></button></div></div>
       <div class="form-group"><label>子域名基域</label><input id="subdomain" class="form-input"></div>
+      <div class="form-group"><label>管理页地址（可选）</label><input id="managementURL" class="form-input" placeholder="如 http://vps:17500"></div>
+      <div class="form-group"><label>域名拉取 Token（可选）</label><input id="domainAPIToken" class="form-input" type="password" placeholder="配置后编辑隧道可拉取域名目录"></div>
       <div class="setting-row"><div><label>启用 TLS 连接</label><div class="desc">加密 frpc 到 frps 的控制连接，不等同于 HTTPS 隧道。</div></div><label class="toggle"><input type="checkbox" id="tls" checked><span class="slider"></span></label></div>
     </div>
     <div class="section-card">
@@ -174,6 +176,8 @@ async function save(restart) {
       serverAddr: addr, serverPort: port, authToken: token,
       subDomainHost: subdomain, tlsEnabled: document.getElementById("tls").checked,
       adminPort: adminPort, adminUser: "admin", adminPassword: "admin",
+      managementURL: document.getElementById("managementURL").value.trim(),
+      domainAPIToken: document.getElementById("domainAPIToken").value,
     });
     const current = await api.getSettings().catch(() => ({}));
     await api.saveSettings({
@@ -222,6 +226,8 @@ async function refresh() {
       document.getElementById("adminPort").value = cfg.adminPort || 7400;
       document.getElementById("token").value = cfg.authToken || "";
       document.getElementById("subdomain").value = cfg.subDomainHost || "";
+      document.getElementById("managementURL").value = cfg.managementURL || "";
+      document.getElementById("domainAPIToken").value = cfg.domainAPIToken || "";
       document.getElementById("tls").checked = cfg.tlsEnabled !== false;
       document.getElementById("settingsSub").textContent = `${cfg.serverAddr}:${cfg.serverPort} · ${cfg.subDomainHost||""}`;
     }
