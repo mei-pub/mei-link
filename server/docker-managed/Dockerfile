@@ -20,11 +20,16 @@ WORKDIR /app
 COPY src ./src
 COPY web ./web
 COPY package.json ./
-RUN adduser -D -u 10001 meilink && mkdir /data && chown meilink /data
+RUN adduser -D -u 10001 meilink && mkdir /data && chown meilink /data \
+    && apk add --no-cache su-exec
 
-USER meilink
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
+
+# 注意：不设 USER meilink —— entrypoint 需以 root 启动来 chown 挂载卷，
+# 随后用 su-exec 降权为 meilink 运行 node 服务。
 ENV MEILINK_DATA_DIR=/data MEILINK_FRPS_PATH=/usr/local/bin/frps MEILINK_WEB_PORT=17500
 VOLUME ["/data"]
 EXPOSE 7000 8080 8443 17500
 HEALTHCHECK CMD node -e "fetch('http://127.0.0.1:17500/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node", "--experimental-strip-types", "src/server.ts"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
