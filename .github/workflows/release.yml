@@ -115,31 +115,64 @@ jobs:
         run: |
           set -e
           VERSION="1.1.0"
-          PREBUILT_APP="build/Meilink.app"
-          if [ ! -d "$PREBUILT_APP" ]; then
-            echo "! build/Meilink.app missing (need pre-built bundle in repo)"
-            echo "Contents of build/:"
-            ls -la build/ 2>&1
-            exit 1
-          fi
           mkdir -p release/client/macos-native
-          echo "=== pre-built .app contents ==="
-          find "$PREBUILT_APP" -maxdepth 3 -type f
-          # Inject fresh Swift binary into the pre-built .app bundle
+
+          # 构建 .app bundle
           BIN_PATH="$(swift build -c release --show-bin-path)/Meilink"
-          cp "$BIN_PATH" "$PREBUILT_APP/Contents/MacOS/Meilink"
-          echo "=== injected binary ==="
-          file "$PREBUILT_APP/Contents/MacOS/Meilink"
-          # Bump version in plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
-            "$PREBUILT_APP/Contents/Info.plist"
-          echo "=== plist after version bump ==="
-          /usr/libexec/PlistBuddy -c "Print" "$PREBUILT_APP/Contents/Info.plist"
+          APP_BUNDLE="build/Meilink.app"
+          rm -rf "$APP_BUNDLE"
+          mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
+
+          # 复制二进制
+          cp "$BIN_PATH" "$APP_BUNDLE/Contents/MacOS/Meilink"
+
+          # 下载 frpc
+          bash scripts/assets/download-frpc.sh
+          # frpc 下载到当前目录，移到 .app 里
+          if [ -f frpc ]; then
+            cp frpc "$APP_BUNDLE/Contents/MacOS/frpc"
+          fi
+
+          # 生成 Info.plist
+          cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>Meilink</string>
+  <key>CFBundleIdentifier</key>
+  <string>pub.mei.meilink</string>
+  <key>CFBundleName</key>
+  <string>Meilink</string>
+  <key>CFBundleDisplayName</key>
+  <string>Meilink</string>
+  <key>CFBundleVersion</key>
+  <string>1.0</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$VERSION</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>LSUIElement</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+
+          # 复制 AppIcon（如果存在）
+          if [ -f "client/macos-native/Resources/AppIcon.icns" ]; then
+            cp "client/macos-native/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
+          fi
+
+          echo "=== .app bundle contents ==="
+          find "$APP_BUNDLE" -maxdepth 3 -type f
+
           # Build DMG
-          mkdir -p release
           STAGE="/tmp/dmg-staging-$"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
-          cp -R "$PREBUILT_APP" "$STAGE/"
+          cp -R "$APP_BUNDLE" "$STAGE/"
           ln -s /Applications "$STAGE/Applications"
           echo "=== staging contents ==="
           ls -la "$STAGE"

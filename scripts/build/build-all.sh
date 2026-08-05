@@ -140,7 +140,7 @@ echo ""
 # -----------------------------------------------------------------------------
 echo ">>> Building macOS native app DMG..."
 cd "$ROOT_DIR"
-NATIVE_DMG="$RELEASE_DIR/meilink-${VERSION}-macos-native.dmg"
+NATIVE_DMG="$RELEASE_NATIVE_DIR/meilink-${VERSION}-macos-native.dmg"
 
 # Prefer building a fresh .app via Xcode if the full app is available.
 xcodebuild_available() {
@@ -176,35 +176,62 @@ if xcodebuild_available; then
     fi
 fi
 
-# Fallback: package the pre-built .app bundle (build/Meilink.app) if the fresh
-# build was skipped or failed. This bundle already contains the icon + frpc.
-# When Xcode isn't available, rebuild the Swift binary via SwiftPM and inject
-# it into the pre-built .app so the DMG carries the latest Swift code.
+# Fallback: build .app bundle from Swift binary + generated Info.plist
 if [ ! -f "$NATIVE_DMG" ]; then
-    PREBUILT_APP="$ROOT_DIR/build/Meilink.app"
-    if [ -d "$PREBUILT_APP" ]; then
-        echo "  - rebuilding Swift binary via SwiftPM..."
-        if swift build -c release >/dev/null 2>&1; then
-            # Use --show-bin-path to find the release binary (SwiftPM puts it
-            # under .build/<arch>-apple-macosx/release on newer toolchains).
-            SWIFT_BIN_DIR="$(swift build -c release --show-bin-path 2>/dev/null)"
-            if [ -f "$SWIFT_BIN_DIR/Meilink" ]; then
-                cp "$SWIFT_BIN_DIR/Meilink" "$PREBUILT_APP/Contents/MacOS/Meilink"
-                echo "  ✓ Swift binary rebuilt and injected"
-            else
-                echo "  ! Swift binary not found at $SWIFT_BIN_DIR; using existing binary"
+    echo "  - building .app bundle from Swift binary..."
+    if swift build -c release >/dev/null 2>&1; then
+        SWIFT_BIN_DIR="$(swift build -c release --show-bin-path 2>/dev/null)"
+        if [ -f "$SWIFT_BIN_DIR/Meilink" ]; then
+            APP_BUNDLE="$ROOT_DIR/build/Meilink.app"
+            rm -rf "$APP_BUNDLE"
+            mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
+            cp "$SWIFT_BIN_DIR/Meilink" "$APP_BUNDLE/Contents/MacOS/Meilink"
+            # Download frpc if available
+            if bash "$ROOT_DIR/scripts/assets/download-frpc.sh" >/dev/null 2>&1; then
+                if [ -f frpc ]; then
+                    cp frpc "$APP_BUNDLE/Contents/MacOS/frpc" 2>/dev/null || true
+                    rm -f frpc
+                fi
             fi
+            # Copy icons if available
+            if [ -f "$ROOT_DIR/client/macos-native/Resources/AppIcon.icns" ]; then
+                cp "$ROOT_DIR/client/macos-native/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
+            fi
+            # Generate Info.plist
+            cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>Meilink</string>
+  <key>CFBundleIdentifier</key>
+  <string>pub.mei.meilink</string>
+  <key>CFBundleName</key>
+  <string>Meilink</string>
+  <key>CFBundleDisplayName</key>
+  <string>Meilink</string>
+  <key>CFBundleVersion</key>
+  <string>1.0</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$VERSION</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>LSUIElement</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+            echo "  ✓ .app bundle built from Swift binary"
+            make_dmg "$APP_BUNDLE" "$NATIVE_DMG"
+            echo "  ✓ $(basename "$NATIVE_DMG") (from Swift binary)"
         else
-            echo "  ! swift build failed; using existing binary in pre-built bundle"
+            echo "  ! Swift binary not found at $SWIFT_BIN_DIR; skipping DMG."
         fi
-        echo "  - packaging pre-built $PREBUILT_APP into DMG..."
-        # Bump the version in the prebuilt plist so it matches this release.
-        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
-            "$PREBUILT_APP/Contents/Info.plist" 2>/dev/null || true
-        make_dmg "$PREBUILT_APP" "$NATIVE_DMG"
-        echo "  ✓ $(basename "$NATIVE_DMG") (pre-built bundle)"
     else
-        echo "  ! No Meilink.app available (need Xcode or a pre-built bundle); skipping DMG."
+        echo "  ! swift build failed; skipping DMG."
     fi
 fi
 echo ""
@@ -215,9 +242,14 @@ echo ""
 rm -rf "$STAGE_DIR"
 
 echo "=== Done. Release artifacts: ==="
-ls -lh "$RELEASE_DIR"/meilink-*"$VERSION"* "$RELEASE_DIR"/*.dmg 2>/dev/null | sort -k 9 | awk '{print $9, $5}'
+find "$RELEASE_NATIVE_DIR" "$ROOT_DIR/release/client/desktop" "$RELEASE_SERVER_DIR" \
+    -type f -not -name '.gitkeep' 2>/dev/null \
+    | sort | while read -r f; do
+    size=$(ls -lh "$f" | awk '{print $5}')
+    echo "  $f  ($size)"
+done
 echo ""
 echo "产物说明:"
-echo "  *macos-native.dmg        macOS 原生客户端 (Swift .app bundle + 图标)"
-echo "  *desktop-*darwin*.dmg    跨平台 Tauri 桌面客户端 (原生 GUI，与 Swift 端对齐)"
-echo "  *setup*.tar.gz           服务端部署工具 (Linux)"
+echo "  client/macos-native/    macOS 原生客户端 (Swift .app bundle + 图标)"
+echo "  client/desktop/         跨平台 Tauri 桌面客户端 (原生 GUI，与 Swift 端对齐)"
+echo "  server/                 服务端部署工具 (Linux)"
