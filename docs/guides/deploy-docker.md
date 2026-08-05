@@ -218,24 +218,13 @@ docker run -d \
 
 #### (b) Docker Compose（推荐，易维护）
 
-> ⚠️ `server/docker-managed/` 目录**没有**自带 compose 文件，下面是手册提供的范本。新建 `docker-compose.yml`：
+`server/docker-managed/` 目录自带 `docker-compose.yml`，直接使用：
 
-```yaml
-services:
-  meilink-server:
-    image: meilink-server:latest
-    build: ./server/docker-managed   # 首次会自动构建；之后改 build context 才重建
-    container_name: meilink-server
-    restart: unless-stopped
-    ports:
-      - "7000:7000"                # frps 客户端连接
-      - "8080:8080"                # HTTP vhost
-      - "8443:8443"                # HTTPS vhost
-      - "127.0.0.1:17500:17500"    # 管理页（仅本机，远程请走反代）
-    environment:
-      MEILINK_ADMIN_USER: admin
-      MEILINK_ADMIN_PASSWORD: "replace-with-a-strong-password"
-      MEILINK_FRPS_TOKEN: "replace-with-a-long-frp-token"
+```bash
+cd server/docker-managed
+# 编辑 docker-compose.yml，修改环境变量
+docker compose up -d
+```
       MEILINK_PRIMARY_DOMAIN: "tunnel.yourdomain.com"
       # 以下为可选项，不填用默认值
       # MEILINK_WEB_PORT: 17500

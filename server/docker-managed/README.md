@@ -2,7 +2,19 @@
 
 一个镜像同时运行 frps 和 Meilink 服务端管理页。管理页账号、密码只从 Docker 环境变量读取，不写入数据卷。
 
-## NAS / Docker 直接运行
+## 快速开始
+
+```bash
+# 构建镜像 + 启动
+docker compose up -d
+
+# 查看日志
+docker compose logs -f meilink-server
+```
+
+首次启动后浏览器打开 `http://服务器IP:17500`（若 17500 绑了 127.0.0.1，先用 SSH 端口转发：`ssh -L 17500:127.0.0.1:17500 user@vps`），使用环境变量中的账号密码登录，并在页面维护 frps 端口和域名目录。
+
+## NAS / Docker 直接运行（不依赖 compose）
 
 ```bash
 docker run -d --name meilink-server --restart unless-stopped \
@@ -13,8 +25,6 @@ docker run -d --name meilink-server --restart unless-stopped \
   -e MEILINK_FRPS_TOKEN='replace-with-a-long-frp-token' \
   meilink-server:latest
 ```
-
-浏览器打开 `http://服务器IP:17500`。首次启动后使用环境变量中的账号密码登录，并在页面维护 frps 端口和域名目录。
 
 ## 域名与泛域名
 
