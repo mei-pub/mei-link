@@ -159,6 +159,7 @@ export const api = {
   getSettings: () => req("/api/settings"),
   saveSettings: (s) => req("/api/settings", { method: "POST", body: s }),
   getDomains: () => req("/api/domains"),
+  getBootstrap: () => req("/api/bootstrap"),
 };
 
 /** Open another window via the Rust command. */

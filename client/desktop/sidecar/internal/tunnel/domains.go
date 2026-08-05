@@ -39,6 +39,16 @@ type domainsResponse struct {
 	Domains []DomainEntry `json:"domains"`
 }
 
+// BootstrapInfo 是客户端启动所需的全部信息，从服务端 /api/bootstrap 拉取。
+// 让客户端 SetupView 只需填「管理页地址 + token」两个字段。
+type BootstrapInfo struct {
+	ServerAddr     string        `json:"serverAddr"`
+	ServerPort     int           `json:"serverPort"`
+	AuthToken      string        `json:"authToken"`
+	SubDomainHost  string        `json:"subDomainHost"`
+	Domains        []DomainEntry `json:"domains"`
+}
+
 // FetchDomains 从服务端管理页拉取域名目录。客户端不持久化，每次实时拉。
 // 失败时返回 error，调用方 fallback 到手填模式。
 func FetchDomains(managementURL, token string) ([]DomainEntry, error) {
@@ -83,4 +93,49 @@ func FetchDomains(managementURL, token string) ([]DomainEntry, error) {
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 	return dr.Domains, nil
+}
+
+// FetchBootstrap 从服务端管理页拉取客户端启动信息（frps 地址/端口/token/子域名基域/域名目录）。
+// 让客户端 SetupView 只需填「管理页地址 + token」两个字段。失败时返回 error。
+func FetchBootstrap(managementURL, token string) (*BootstrapInfo, error) {
+	if managementURL == "" || token == "" {
+		return nil, fmt.Errorf("未配置管理页地址或 token")
+	}
+	base := managementURL
+	for len(base) > 0 && base[len(base)-1] == '/' {
+		base = base[:len(base)-1]
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest("GET", base+"/api/bootstrap", nil)
+	if err != nil {
+		return nil, fmt.Errorf("管理页地址无效: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("无法连接管理页: %w", err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case 404:
+		return nil, fmt.Errorf("服务端未启用启动信息接口（未配 MEILINK_DOMAIN_API_TOKEN）")
+	case 401:
+		return nil, fmt.Errorf("域名拉取 token 错误")
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("管理页返回错误（HTTP %d）", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %w", err)
+	}
+	var bi BootstrapInfo
+	if err := json.Unmarshal(body, &bi); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+	return &bi, nil
 }

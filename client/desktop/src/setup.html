@@ -22,18 +22,25 @@
   <div class="subtitle">请配置你的 VPS 服务器信息</div>
 
   <div class="form-section">
-    <h3>服务器信息</h3>
-    <div class="form-group"><label>服务器地址</label><input id="addr" class="form-input" placeholder="tunnel.example.com"></div>
-    <div class="row-2">
-      <div class="form-group"><label>端口</label><input id="port" class="form-input" type="number" value="7000"></div>
-      <div class="form-group"><label>认证 Token</label><input id="token" class="form-input" type="password"></div>
-    </div>
+    <h3>快速配置</h3>
+    <div class="form-group"><label>管理页地址</label><input id="mgmtURL" class="form-input" placeholder="如 http://vps:17500"></div>
+    <div class="form-group"><label>管理页 Token</label><input id="mgmtToken" class="form-input" type="password"></div>
+    <button class="btn btn-sm" id="fetchBtn" style="margin-top:4px">拉取配置</button>
+    <div id="fetchResult" class="test-result" style="display:none"></div>
+    <div class="dns-hint">填写管理页地址和 Token，自动拉取服务器连接信息。也可展开下方详细配置手动填写。</div>
   </div>
 
   <div class="form-section">
-    <h3>子域名配置</h3>
-    <div class="form-group"><label>子域名基域</label><input id="subdomain" class="form-input" placeholder="tunnel.example.com"></div>
-    <div class="dns-hint">需在 DNS 添加泛解析: <strong>*.<span id="dnsHost">tunnel.example.com</span></strong> → VPS IP</div>
+    <h3 id="advToggle" style="cursor:pointer;user-select:none">▾ 详细配置（自动填充，可手动修改）</h3>
+    <div id="advPanel">
+      <div class="form-group"><label>服务器地址</label><input id="addr" class="form-input" placeholder="tunnel.example.com"></div>
+      <div class="row-2">
+        <div class="form-group"><label>端口</label><input id="port" class="form-input" type="number" value="7000"></div>
+        <div class="form-group"><label>认证 Token</label><input id="token" class="form-input" type="password"></div>
+      </div>
+      <div class="form-group"><label>子域名基域</label><input id="subdomain" class="form-input" placeholder="tunnel.example.com"></div>
+      <div class="dns-hint">需在 DNS 添加泛解析: <strong>*.<span id="dnsHost">tunnel.example.com</span></strong> → VPS IP</div>
+    </div>
   </div>
 
   <div class="form-section">
@@ -60,6 +67,45 @@ document.getElementById("cancelBtn").onclick = () => closeWindow();
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeWindow(); });
 document.getElementById("subdomain").addEventListener("input", (e) => { document.getElementById("dnsHost").textContent = e.target.value || "tunnel.example.com"; });
 
+// 详细配置折叠
+let advOpen = true;
+document.getElementById("advToggle").onclick = () => {
+  advOpen = !advOpen;
+  document.getElementById("advPanel").style.display = advOpen ? "block" : "none";
+  document.getElementById("advToggle").textContent = (advOpen ? "▾" : "▸") + " 详细配置（自动填充，可手动修改）";
+  autoFitWindow();
+};
+
+// 拉取 bootstrap：填管理页地址+token 后自动填充详细字段
+async function doFetchBootstrap() {
+  const url = document.getElementById("mgmtURL").value.trim();
+  const token = document.getElementById("mgmtToken").value.trim();
+  if (!url || !token) { return false; }
+  const btn = document.getElementById("fetchBtn"); btn.textContent = "拉取中…"; btn.disabled = true;
+  const result = document.getElementById("fetchResult"); result.style.display = "flex";
+  try {
+    // 先把管理页信息存进 server config（fetchBootstrap 依赖 sidecar 的 server config）
+    const cur = await api.getServerConfig().catch(() => ({}));
+    await api.saveServerConfig({ ...cur, managementURL: url, domainAPIToken: token });
+    const info = await api.getBootstrap();
+    if (info.error) { throw new Error(info.error); }
+    if (info.serverAddr) document.getElementById("addr").value = info.serverAddr;
+    if (info.serverPort) document.getElementById("port").value = info.serverPort;
+    if (info.authToken) document.getElementById("token").value = info.authToken;
+    if (info.subDomainHost) { document.getElementById("subdomain").value = info.subDomainHost; document.getElementById("dnsHost").textContent = info.subDomainHost; }
+    result.className = "test-result ok"; result.innerHTML = icons.check + " 已拉取：" + (info.serverAddr || "-") + ":" + info.serverPort;
+    btn.textContent = "拉取配置"; btn.disabled = false;
+    advOpen = true; document.getElementById("advPanel").style.display = "block"; document.getElementById("advToggle").textContent = "▾ 详细配置（自动填充，可手动修改）";
+    autoFitWindow();
+    return true;
+  } catch(e) {
+    result.className = "test-result fail"; result.innerHTML = icons.close + " 拉取失败：" + esc(e.message || e);
+    btn.textContent = "拉取配置"; btn.disabled = false;
+    return false;
+  }
+}
+document.getElementById("fetchBtn").onclick = doFetchBootstrap;
+
 document.getElementById("testBtn").onclick = async () => {
   const addr = document.getElementById("addr").value.trim(); const port = parseInt(document.getElementById("port").value) || 7000;
   if (!addr) return;
@@ -74,10 +120,19 @@ document.getElementById("testBtn").onclick = async () => {
 };
 
 document.getElementById("saveBtn").onclick = async () => {
-  const addr = document.getElementById("addr").value.trim(); const port = parseInt(document.getElementById("port").value) || 7000;
-  const token = document.getElementById("token").value.trim(); const subdomain = document.getElementById("subdomain").value.trim();
-  if (!addr || !token || !subdomain) { customAlert("请填写所有字段"); return; }
-  await api.saveServerConfig({ serverAddr: addr, serverPort: port, authToken: token, subDomainHost: subdomain, tlsEnabled: document.getElementById("tls").checked, adminPort: 7400, adminUser: "admin", adminPassword: "admin" });
+  let addr = document.getElementById("addr").value.trim(); let port = parseInt(document.getElementById("port").value) || 7000;
+  let token = document.getElementById("token").value.trim(); let subdomain = document.getElementById("subdomain").value.trim();
+  const mgmtURL = document.getElementById("mgmtURL").value.trim(); const mgmtToken = document.getElementById("mgmtToken").value.trim();
+  // 填了管理页信息但没拉取（addr 为空）：先自动拉取
+  if (!addr && mgmtURL && mgmtToken) {
+    const ok = await doFetchBootstrap();
+    if (!ok) { customAlert("拉取配置失败，请检查管理页地址和 Token，或手动填写详细配置"); return; }
+    addr = document.getElementById("addr").value.trim();
+    token = document.getElementById("token").value.trim();
+    subdomain = document.getElementById("subdomain").value.trim();
+  }
+  if (!addr || !token || !subdomain) { customAlert("请填写管理页信息拉取，或手动填写详细配置所有字段"); return; }
+  await api.saveServerConfig({ serverAddr: addr, serverPort: port, authToken: token, subDomainHost: subdomain, tlsEnabled: document.getElementById("tls").checked, adminPort: 7400, adminUser: "admin", adminPassword: "admin", managementURL: mgmtURL, domainAPIToken: mgmtToken });
   try { await api.start(); } catch(e) {}
   closeWindow();
 };
@@ -88,6 +143,10 @@ api.getServerConfig().then(c => {
     document.getElementById("token").value = c.authToken || ""; document.getElementById("subdomain").value = c.subDomainHost || "";
     document.getElementById("tls").checked = c.tlsEnabled !== false;
     document.getElementById("dnsHost").textContent = c.subDomainHost || "tunnel.example.com";
+  }
+  if (c && c.managementURL) {
+    document.getElementById("mgmtURL").value = c.managementURL;
+    document.getElementById("mgmtToken").value = c.domainAPIToken || "";
   }
 }).catch(()=>{}).finally(() => autoFitWindow());
 </script>

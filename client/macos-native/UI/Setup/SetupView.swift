@@ -18,6 +18,10 @@ struct SetupView: View {
     @State private var isTesting = false
     @State private var testResult: String?
     @State private var testSuccess = false
+    @State private var isFetching = false
+    @State private var fetchMessage: String?
+    @State private var fetchSucceeded = false
+    @State private var showAdvanced = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -29,7 +33,37 @@ struct SetupView: View {
                 .foregroundColor(.secondary)
 
             Form {
-                Section("服务器信息") {
+                Section("快速配置") {
+                    TextField("管理页地址 (如 http://vps:17500)", text: $managementURL)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+
+                    SecureField("管理页 Token", text: $domainAPIToken)
+                        .textFieldStyle(.roundedBorder)
+
+                    Button {
+                        fetchBootstrap()
+                    } label: {
+                        if isFetching { Text("拉取中...") } else { Text("拉取配置") }
+                    }
+                    .disabled(managementURL.isEmpty || domainAPIToken.isEmpty || isFetching)
+
+                    if let msg = fetchMessage {
+                        Label(msg, systemImage: fetchSucceeded ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(fetchSucceeded ? .green : .red)
+                    }
+
+                    Text("填写管理页地址和 Token，自动拉取服务器连接信息。也可展开下方详细配置手动填写。")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Section {
+                    Toggle("启用 TLS 加密连接", isOn: $tlsEnabled)
+                }
+
+                DisclosureGroup("详细配置（自动填充，可手动修改）", isExpanded: $showAdvanced) {
                     TextField("服务器地址", text: $serverAddr)
                         .textFieldStyle(.roundedBorder)
 
@@ -42,32 +76,13 @@ struct SetupView: View {
 
                     SecureField("认证 Token", text: $authToken)
                         .textFieldStyle(.roundedBorder)
-                }
 
-                Section("子域名配置") {
                     TextField("子域名基域 (如 tunnel.example.com)", text: $subDomainHost)
                         .textFieldStyle(.roundedBorder)
 
                     Text("需在 DNS 添加泛解析: *.\(subDomainHost.isEmpty ? "tunnel.example.com" : subDomainHost) → VPS IP")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                }
-
-                Section("管理页（可选）") {
-                    TextField("管理页地址 (如 http://vps:17500)", text: $managementURL)
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-
-                    SecureField("域名拉取 Token", text: $domainAPIToken)
-                        .textFieldStyle(.roundedBorder)
-
-                    Text("配置后，编辑 HTTP/HTTPS 隧道时可从服务端拉取域名目录，自动适配子域名/泛域名。不填则隧道编辑走手填模式。")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                Section {
-                    Toggle("启用 TLS 加密连接", isOn: $tlsEnabled)
                 }
             }
             .formStyle(.grouped)
@@ -97,7 +112,8 @@ struct SetupView: View {
                 Button("保存") {
                     saveConfiguration()
                 }
-                .disabled(serverAddr.isEmpty || authToken.isEmpty || subDomainHost.isEmpty)
+                // 填了管理页信息即可保存（会自动拉取）；或填了完整服务器信息也可
+                .disabled(managementURL.isEmpty ? (serverAddr.isEmpty || authToken.isEmpty) : (serverAddr.isEmpty && authToken.isEmpty))
                 .keyboardShortcut(.defaultAction)
             }
         }
@@ -113,6 +129,34 @@ struct SetupView: View {
             tlsEnabled = config.tlsEnabled
             managementURL = config.managementURL
             domainAPIToken = config.domainAPIToken
+        }
+    }
+
+    /// 从管理页拉取启动信息，自动填充详细配置字段。
+    private func fetchBootstrap() {
+        isFetching = true
+        fetchMessage = nil
+        Task {
+            do {
+                let info = try await DomainDirectory.fetchBootstrap(managementURL: managementURL, token: domainAPIToken)
+                await MainActor.run {
+                    if !info.serverAddr.isEmpty { serverAddr = info.serverAddr }
+                    if info.serverPort > 0 { serverPort = String(info.serverPort) }
+                    if !info.authToken.isEmpty { authToken = info.authToken }
+                    if !info.subDomainHost.isEmpty { subDomainHost = info.subDomainHost }
+                    isFetching = false
+                    fetchSucceeded = true
+                    fetchMessage = "已拉取：\(info.serverAddr.isEmpty ? "未设置" : info.serverAddr):\(info.serverPort)"
+                    // 拉取成功后展开详细配置让用户确认
+                    showAdvanced = true
+                }
+            } catch {
+                await MainActor.run {
+                    isFetching = false
+                    fetchSucceeded = false
+                    fetchMessage = error.localizedDescription
+                }
+            }
         }
     }
 
@@ -142,6 +186,40 @@ struct SetupView: View {
     }
 
     private func saveConfiguration() {
+        // 若填了管理页信息但没拉取（serverAddr 为空），先自动拉取再保存
+        if serverAddr.isEmpty, !managementURL.isEmpty, !domainAPIToken.isEmpty {
+            Task {
+                isFetching = true
+                let ok = await fetchBootstrapAndWait()
+                isFetching = false
+                if ok { performSave() }
+            }
+            return
+        }
+        performSave()
+    }
+
+    /// 同步拉取 bootstrap 并填充字段，返回是否成功。
+    private func fetchBootstrapAndWait() async -> Bool {
+        do {
+            let info = try await DomainDirectory.fetchBootstrap(managementURL: managementURL, token: domainAPIToken)
+            await MainActor.run {
+                if !info.serverAddr.isEmpty { serverAddr = info.serverAddr }
+                if info.serverPort > 0 { serverPort = String(info.serverPort) }
+                if !info.authToken.isEmpty { authToken = info.authToken }
+                if !info.subDomainHost.isEmpty { subDomainHost = info.subDomainHost }
+            }
+            return true
+        } catch {
+            await MainActor.run {
+                fetchSucceeded = false
+                fetchMessage = "拉取失败：\(error.localizedDescription)"
+            }
+            return false
+        }
+    }
+
+    private func performSave() {
         let port = Int(serverPort) ?? 7000
         let config = ServerConfig(
             serverAddr: serverAddr,

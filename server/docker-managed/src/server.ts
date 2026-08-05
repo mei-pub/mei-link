@@ -68,6 +68,23 @@ export async function createManagementServer(options: ServerOptions = {}): Promi
         const domains = manager.currentConfig().domains.filter((d) => d.enabled).map((d) => ({ domain: d.domain, kind: d.kind }));
         return json(response, 200, { domains });
       }
+      // /api/bootstrap：客户端首次配置时一次性拉取所有启动信息（frps 地址/端口/token/
+      // 子域名基域/域名目录）。复用 MEILINK_DOMAIN_API_TOKEN 认证，与 /api/domains 同 token。
+      // 让客户端 SetupView 只需填「管理页地址 + token」两个字段。
+      if (url.pathname === "/api/bootstrap" && request.method === "GET") {
+        if (!domainApiToken.configured) return json(response, 404, { error: "启动信息接口未启用" });
+        if (!domainApiToken.valid(request.headers.authorization || "")) return json(response, 401, { error: "token 无效" });
+        const cfg = manager.currentConfig();
+        const primary = cfg.domains.find((d) => d.kind === "primary" && d.enabled)?.domain || "";
+        const domains = cfg.domains.filter((d) => d.enabled).map((d) => ({ domain: d.domain, kind: d.kind }));
+        return json(response, 200, {
+          serverAddr: cfg.serverAddr || "",
+          serverPort: cfg.bindPort,
+          authToken: cfg.authToken,
+          subDomainHost: primary,
+          domains,
+        });
+      }
       if (url.pathname === "/api/login" && request.method === "POST") {
         const input = await body(request);
         const token = auth.login(String(input.user || ""), String(input.password || ""));

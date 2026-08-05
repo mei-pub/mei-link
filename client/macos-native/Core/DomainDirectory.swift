@@ -27,31 +27,50 @@ enum DomainDirectory {
     struct Response: Codable { let domains: [DomainEntry] }
 
     static func fetch(managementURL: String, token: String) async throws -> [DomainEntry] {
-        let base = managementURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "/", with: "") // 去掉尾部的 /
-        guard !base.isEmpty, !token.isEmpty else {
-            throw DomainDirectoryError.notConfigured
-        }
-        guard let url = URL(string: "\(base)/api/domains") else {
-            throw DomainDirectoryError.invalidURL
-        }
+        try await fetchDomains(from: managementURL, token: token, path: "/api/domains").domains
+    }
 
+    /// 一次性拉取客户端启动所需的全部信息（frps 地址/端口/token/子域名基域/域名目录）。
+    /// 让 SetupView 只需填「管理页地址 + token」两个字段。
+    static func fetchBootstrap(managementURL: String, token: String) async throws -> BootstrapInfo {
+        let base = normalizeBase(managementURL)
+        guard !base.isEmpty, !token.isEmpty else { throw DomainDirectoryError.notConfigured }
+        guard let url = URL(string: "\(base)/api/bootstrap") else { throw DomainDirectoryError.invalidURL }
+        return try await fetchAndDecode(BootstrapInfo.self, url: url, token: token)
+    }
+
+    private static func fetchDomains(from managementURL: String, token: String, path: String) async throws -> Response {
+        let base = normalizeBase(managementURL)
+        guard !base.isEmpty, !token.isEmpty else { throw DomainDirectoryError.notConfigured }
+        guard let url = URL(string: "\(base)\(path)") else { throw DomainDirectoryError.invalidURL }
+        return try await fetchAndDecode(Response.self, url: url, token: token)
+    }
+
+    private static func normalizeBase(_ managementURL: String) -> String {
+        managementURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "")
+    }
+
+    private static func fetchAndDecode<T: Decodable>(_ type: T.Type, url: URL, token: String) async throws -> T {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 5
-
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw DomainDirectoryError.invalidResponse
-        }
+        guard let http = response as? HTTPURLResponse else { throw DomainDirectoryError.invalidResponse }
         if http.statusCode == 404 { throw DomainDirectoryError.endpointDisabled }
         if http.statusCode == 401 { throw DomainDirectoryError.unauthorized }
-        guard http.statusCode == 200 else {
-            throw DomainDirectoryError.httpError(http.statusCode)
-        }
-        let decoded = try JSONDecoder().decode(Response.self, from: data)
-        return decoded.domains
+        guard http.statusCode == 200 else { throw DomainDirectoryError.httpError(http.statusCode) }
+        return try JSONDecoder().decode(type, from: data)
     }
+}
+
+/// 客户端启动信息：从服务端 /api/bootstrap 拉取，用于自动填充 ServerConfig。
+struct BootstrapInfo: Codable {
+    let serverAddr: String
+    let serverPort: Int
+    let authToken: String
+    let subDomainHost: String
+    let domains: [DomainEntry]
 }
 
 enum DomainDirectoryError: Error, LocalizedError {

@@ -52,7 +52,7 @@ let currentConfig = null;
 async function refresh() {
   const [config, status, events] = await Promise.all([request("/api/config"), request("/api/status"), request("/api/events")]);
   currentConfig = config;
-  form.bindPort.value = config.bindPort; form.vhostHTTPPort.value = config.vhostHTTPPort; form.vhostHTTPSPort.value = config.vhostHTTPSPort; form.authToken.value = config.authToken;
+  form.bindPort.value = config.bindPort; form.vhostHTTPPort.value = config.vhostHTTPPort; form.vhostHTTPSPort.value = config.vhostHTTPSPort; form.authToken.value = config.authToken; form.serverAddr.value = config.serverAddr || "";
   rows.replaceChildren(); config.domains.forEach((item) => addDomain(item.domain, item.kind, item.enabled));
   document.querySelector("#frpsState").textContent = status.running ? "运行中" : status.configured ? "未运行" : "待配置";
   document.querySelector("#domainCount").textContent = String(status.domains.length);
@@ -129,10 +129,10 @@ document.querySelector("#loginForm").onsubmit = async (event) => { event.prevent
 document.querySelector("#addDomain").onclick = () => addDomain();
 
 // 系统设置保存（端口 + token）
-form.onsubmit = async (event) => { event.preventDefault(); const notice = document.querySelector("#saveNotice"); try { await request("/api/config", { method: "POST", body: JSON.stringify({ bindPort: Number(form.bindPort.value), vhostHTTPPort: Number(form.vhostHTTPPort.value), vhostHTTPSPort: Number(form.vhostHTTPSPort.value), authToken: form.authToken.value, domains: currentConfig?.domains || [] }) }); notice.style.color = "#1b9762"; notice.textContent = "已保存并重启 frps"; await refresh(); } catch (error) { notice.style.color = "#c33d4c"; notice.textContent = error.message; } };
+form.onsubmit = async (event) => { event.preventDefault(); const notice = document.querySelector("#saveNotice"); try { await request("/api/config", { method: "POST", body: JSON.stringify({ bindPort: Number(form.bindPort.value), vhostHTTPPort: Number(form.vhostHTTPPort.value), vhostHTTPSPort: Number(form.vhostHTTPSPort.value), authToken: form.authToken.value, serverAddr: form.serverAddr.value.trim(), domains: currentConfig?.domains || [] }) }); notice.style.color = "#1b9762"; notice.textContent = "已保存并重启 frps"; await refresh(); } catch (error) { notice.style.color = "#c33d4c"; notice.textContent = error.message; } };
 
 // 域名保存（独立按钮，保留端口/token 不变）
-document.querySelector("#saveDomainsBtn").onclick = async (event) => { event.preventDefault(); const notice = document.querySelector("#domainSaveNotice"); try { await request("/api/config", { method: "POST", body: JSON.stringify({ bindPort: Number(form.bindPort.value), vhostHTTPPort: Number(form.vhostHTTPPort.value), vhostHTTPSPort: Number(form.vhostHTTPSPort.value), authToken: form.authToken.value, domains: domainsFromForm() }) }); notice.style.color = "#1b9762"; notice.textContent = "已保存并重启 frps"; await refresh(); } catch (error) { notice.style.color = "#c33d4c"; notice.textContent = error.message; } };
+document.querySelector("#saveDomainsBtn").onclick = async (event) => { event.preventDefault(); const notice = document.querySelector("#domainSaveNotice"); try { await request("/api/config", { method: "POST", body: JSON.stringify({ bindPort: Number(form.bindPort.value), vhostHTTPPort: Number(form.vhostHTTPPort.value), vhostHTTPSPort: Number(form.vhostHTTPSPort.value), authToken: form.authToken.value, serverAddr: form.serverAddr.value.trim(), domains: domainsFromForm() }) }); notice.style.color = "#1b9762"; notice.textContent = "已保存并重启 frps"; await refresh(); } catch (error) { notice.style.color = "#c33d4c"; notice.textContent = error.message; } };
 
 ["bindPort", "vhostHTTPPort", "vhostHTTPSPort"].forEach((name) => form[name].addEventListener("input", updatePortNotice));
 document.querySelector("#restartFrps").onclick = async () => { await request("/api/control/restart", { method: "POST" }); await refresh(); };

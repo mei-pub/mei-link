@@ -42,6 +42,7 @@ func (s *Server) buildMux() http.Handler {
 	mux.HandleFunc("/api/events", s.handleEvents)
 	mux.HandleFunc("/api/settings", s.handleSettings)
 	mux.HandleFunc("/api/domains", s.handleDomains)
+	mux.HandleFunc("/api/bootstrap", s.handleBootstrap)
 	// Wrap the mux in a CORS middleware. The sidecar listens on 127.0.0.1 only,
 	// so cross-origin access from the Tauri webview (tauri://) or the Vite dev
 	// server (http://localhost:17420) needs explicit CORS headers. Without
@@ -378,6 +379,27 @@ func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"domains": domains})
+}
+
+// handleBootstrap 代理客户端到服务端管理页的启动信息拉取。
+// 前端 GET /api/bootstrap 调用此端点拉取 frps 连接信息，让 SetupView 只填管理页地址+token。
+func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	cfg, err := s.cfg.LoadServerConfig()
+	if err != nil || cfg == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "未配置服务器"})
+		return
+	}
+	info, err := tunnel.FetchBootstrap(cfg.ManagementURL, cfg.DomainAPIToken)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(info)
 }
 
 func formatSeconds(v float64) string {

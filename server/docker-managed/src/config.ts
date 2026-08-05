@@ -12,6 +12,12 @@ export type ServerConfig = {
   vhostHTTPSPort: number;
   authToken: string;
   domains: ManagedDomain[];
+  /**
+   * frps 对外地址（客户端连接用的域名/IP，如 aicun.cc）。
+   * 仅存 server.json 供客户端通过 /api/bootstrap 拉取，不写进 frps.toml（frps 不需要）。
+   * 可选：留空时客户端无法用 bootstrap 自动填充，需手填。
+   */
+  serverAddr?: string;
 };
 
 const hostPattern = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
@@ -59,12 +65,14 @@ function port(value: number, name: string) {
 export function normalizeServerConfig(input: ServerConfig): ServerConfig {
   const authToken = String(input.authToken || "").trim();
   if (!authToken) throw new Error("FRP Token 不能为空");
+  const serverAddr = String(input.serverAddr || "").trim();
   return {
     bindPort: port(Number(input.bindPort), "客户端连接端口"),
     vhostHTTPPort: port(Number(input.vhostHTTPPort), "HTTP 端口"),
     vhostHTTPSPort: port(Number(input.vhostHTTPSPort), "HTTPS 端口"),
     authToken,
     domains: normalizeDomains(Array.isArray(input.domains) ? input.domains : []),
+    serverAddr: serverAddr || undefined,
   };
 }
 

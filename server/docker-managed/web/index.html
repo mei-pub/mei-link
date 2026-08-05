@@ -40,6 +40,8 @@
           <h3 style="font-size:14px;margin:18px 0 8px">端口</h3>
           <div class="ports"><div class="field"><label>客户端连接端口</label><input class="input" name="bindPort" type="number" value="7000" required></div><div class="field"><label>HTTP 访问端口</label><input class="input" name="vhostHTTPPort" type="number" value="8080" required></div><div class="field"><label>HTTPS 访问端口</label><input class="input" name="vhostHTTPSPort" type="number" value="8443" required></div></div>
           <p id="portNotice" class="notice"></p>
+          <h3 style="font-size:14px;margin:18px 0 8px">客户端连接</h3>
+          <div class="field"><label>对外 frps 地址（供客户端拉取）</label><input class="input" name="serverAddr" placeholder="如 aicun.cc（客户端连接用的域名/IP）"></div>
           <h3 style="font-size:14px;margin:18px 0 8px">认证</h3>
           <div class="field"><label>FRP Token</label><input id="authToken" class="input" name="authToken" type="password" required placeholder="客户端连接此服务端所用 Token"></div>
           <div class="actions"><button class="button">保存并应用</button><span id="saveNotice" class="notice"></span></div>
