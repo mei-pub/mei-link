@@ -1,0 +1,43 @@
+# ====================================================================
+# host 网络模式示例
+# --------------------------------------------------------------------
+# 适用场景：希望管理页修改 frps 端口（bindPort/vhostHTTPPort/...）后
+#           立即对外生效，无需重建容器。
+#
+# 与默认 docker-compose.yml 的区别：
+#   - 默认 compose 用 bridge 网络 + ports 映射，端口写死在 compose 里。
+#     在管理页改端口后，必须 `docker compose up -d` 重建才会生效，
+#     否则外部访问的还是旧端口。
+#   - 本文件用 network_mode: host，容器直接复用宿主机网络栈，
+#     管理页改端口后 frps 重启即生效。
+#
+# 代价与注意：
+#   1. 端口隔离消失：管理页 17500 默认对公网开放（代码绑 0.0.0.0）。
+#      管理页内有 FRP Token，务必使用强密码（建议 openssl rand -base64 24）。
+#      如需限制访问，用 ufw/iptables 给 17500 加 IP 白名单。
+#   2. 端口冲突：必须确保宿主机 7000/8080/8443/17500 未被占用。
+#   3. 防火墙/安全组：bridge 模式 Docker 会自动放行映射端口；host 模式
+#      不会，需手动在 ufw / 云厂商安全组放行这些端口。
+#
+# 使用方式：
+#   docker compose -f docker-compose.host.yml up -d
+# ====================================================================
+services:
+  meilink-server:
+    image: meilink-server:latest
+    build: .
+    container_name: meilink-server
+    restart: unless-stopped
+    network_mode: host          # 直接用宿主机网络栈，不要写 ports
+    environment:
+      MEILINK_ADMIN_USER: admin
+      MEILINK_ADMIN_PASSWORD: "replace-with-a-strong-password"   # 务必改成强密码！
+      MEILINK_FRPS_TOKEN: "replace-with-a-long-frp-token"
+      MEILINK_PRIMARY_DOMAIN: "tunnel.yourdomain.com"
+      # 端口默认值（可不填，这里列出供参考；改端口推荐在管理页改，host 模式立即生效）
+      # MEILINK_WEB_PORT: 17500
+      # MEILINK_FRPS_BIND_PORT: 7000
+      # MEILINK_FRPS_HTTP_PORT: 8080
+      # MEILINK_FRPS_HTTPS_PORT: 8443
+    volumes:
+      - ./data:/data            # 持久化 frps 配置 + 域名目录

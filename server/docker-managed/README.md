@@ -14,6 +14,25 @@ docker compose logs -f meilink-server
 
 首次启动后浏览器打开 `http://服务器IP:17500`（若 17500 绑了 127.0.0.1，先用 SSH 端口转发：`ssh -L 17500:127.0.0.1:17500 user@vps`），使用环境变量中的账号密码登录，并在页面维护 frps 端口和域名目录。
 
+## 网络模式：bridge vs host（重要）
+
+默认 `docker-compose.yml` 用 bridge 网络 + 端口映射。**管理页修改 frps 端口（bindPort / vhostHTTPPort / vhostHTTPSPort）后，bridge 模式下需要重建容器才对外生效**，因为 `ports` 映射是启动时写死的。
+
+| 场景 | 推荐模式 | 文件 |
+|---|---|---|
+| 端口基本不变，要端口隔离、管理页绑本机 | bridge（默认） | `docker-compose.yml` |
+| 经常在管理页改端口、希望改完立即生效 | host 网络 | `docker-compose.host.yml` |
+
+**host 模式的代价**（详见 `docker-compose.host.yml` 顶部注释）：
+- 端口隔离消失：管理页 17500 默认对公网开放。**务必用强密码**（`openssl rand -base64 24`），必要时用 ufw/iptables 加 IP 白名单。
+- 必须手动放行防火墙 / 云厂商安全组的端口（host 模式不会自动放行）。
+- 宿主机 7000/8080/8443/17500 不能被其他进程占用。
+
+启用 host 模式：
+```bash
+docker compose -f docker-compose.host.yml up -d
+```
+
 ## NAS / Docker 直接运行（不依赖 compose）
 
 ```bash
