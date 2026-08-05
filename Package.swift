@@ -9,7 +9,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "Meilink",
-            path: "Meilink",
+            path: "client/macos-native",
             exclude: ["Info.plist", "Resources"]
         )
     ]

@@ -1,6 +1,6 @@
 # Meilink SDD · 06 · 关键约束
 
-> 本文列出 Meilink 实现中不可违反的约束。修改代码前必读，避免破坏隐式契约。事实基线：`Meilink/` 下的 Swift 实现 + `Scripts/` + 根目录配置。
+> 本文列出 Meilink 实现中不可违反的约束。修改代码前必读，避免破坏隐式契约。事实基线：`client/macos-native/` 下的 Swift 实现 + `scripts/` + 根目录配置。
 
 ## 1. 平台约束
 
@@ -13,7 +13,7 @@
 - **disableAutomaticTermination / disableSuddenTermination**：应用启动时调用，防止后台被杀
 - **Hardened Runtime**：`ENABLE_HARDENED_RUNTIME = true`（project.yml）
 - **Code Sign**：`CODE_SIGN_STYLE = Automatic`
-- **Bundle ID**：`vip.rego.meilink`（不能改，会破坏 Keychain 已存数据 + Login Items 注册）
+- **Bundle ID**：`pub.mei.meilink`（不能改，会破坏 Keychain 已存数据 + Login Items 注册）
 
 ### 1.2 跨平台客户端
 - macOS：共享 `~/Library/Application Support/Meilink`，与原生客户端互通
@@ -39,7 +39,7 @@
 - 注意 UI 文案明确："加密 frpc 到 frps 的控制连接，不等同于 HTTPS 隧道"
 
 ### 2.4 frpc 二进制完整性
-- frpc 二进制由 `Scripts/download-frpc.sh` 在构建期从 GitHub release 下载（v0.70.0）
+- frpc 二进制由 `scripts/assets/download-frpc.sh` 在构建期从 GitHub release 下载（v0.70.0）
 - 运行期不下载、不升级 frpc
 - 二进制查找顺序：`Bundle.main.executableURL.deletingLastPathComponent()/frpc` → `Bundle.main.path(forResource: "frpc")`
 
@@ -123,7 +123,7 @@
 
 ### 5.4 菜单栏图标 5 种风格
 - portal / topology / arrow-ring / waveform / relay
-- PNG 资源必须放在 `Meilink/Resources/<imageName>.png`
+- PNG 资源必须放在 `client/macos-native/Resources/<imageName>.png`
 - 18×18 + `isTemplate = true`
 - fallback 是 AppIcon
 
@@ -145,7 +145,7 @@
 - 详见 `05-data-contract.md`
 
 ### 6.2 Keychain
-- service = `com.meilink`（不能改，会破坏已存 token）
+- service = `pub.mei.meilink`（不能改，会破坏已存 token）
 - account = `auth-token`
 - accessible = `kSecAttrAccessibleWhenUnlocked`
 - 覆盖式写入（先 delete 再 add）
@@ -162,13 +162,13 @@
 - Basic Auth
 
 ### 6.5 frp 版本
-- v0.70.0（`Scripts/download-frpc.sh` / `Scripts/build-frpc.sh` / `deploy-frps.sh` 三处硬编码）
-- 升级 frp 版本必须三处同步修改 + 验证 frpc.toml schema 兼容性
+- v0.70.0（硬编码在六处：`scripts/assets/download-frpc.sh` / `scripts/build/build-frpc.sh` / `scripts/build/build-desktop.sh` / `server/bare-metal/deploy-frps.sh` / `server/docker-managed/Dockerfile` / `server/setup/main.go`）
+- 升级 frp 版本必须六处同步修改 + 验证 frpc.toml schema 兼容性
 
 ## 7. 跨平台兼容约束
 
 ### 7.1 Swift 是 source of truth
-- macOS 原生 Swift 客户端 (`Meilink/`) 是行为、视觉、数据、状态的事实基线
+- macOS 原生 Swift 客户端 (`client/macos-native/`) 是行为、视觉、数据、状态的事实基线
 - 跨平台客户端（Tauri/Go）必须与 Swift 实现对齐
 - 对齐范围：持久化 schema、状态机、frpc 交互模式、UI 信息架构、状态文案、窗口尺寸、菜单栏行为、自动恢复策略
 
@@ -199,19 +199,18 @@
 ## 8. 构建约束
 
 ### 8.1 frpc 二进制集成
-- macOS 原生客户端：`project.yml` 的 `preBuildScripts` 调 `Scripts/download-frpc.sh`，把 frpc 下载到 `.app/Contents/MacOS/frpc`
-- 跨平台 Go 客户端：运行期自动下载对应平台 frpc
-- Tauri 桌面客户端：Go sidecar 内嵌 frpc 下载逻辑
+- macOS 原生客户端：`project.yml` 的 `preBuildScripts` 调 `scripts/assets/download-frpc.sh`，把 frpc 下载到 `.app/Contents/MacOS/frpc`
+- Tauri 桌面客户端：构建期由 `scripts/build/build-desktop.sh` 下载对应平台 frpc 到 `client/desktop/src-tauri/resources/`，作为安装器内嵌资源，运行期经 `MEILINK_FRPC_BIN` 传给 Go sidecar
 
 ### 8.2 图标资源
-- 源：`Meilink/Resources/AppIcon.png`（1254×1254）
-- `Scripts/gen-icons.sh` 派生 Windows ICO + .syso + Linux PNG
-- `Meilink/Resources/AppIcon.icns` 直接复用
+- 源：`client/macos-native/Resources/AppIcon.png`（1254×1254）
+- `scripts/assets/gen-icons.sh` 派生 Windows ICO + .syso + Linux PNG
+- `client/macos-native/Resources/AppIcon.icns` 直接复用
 - 修改源图标后必须重跑 `gen-icons.sh`
 
 ### 8.3 版本号
 - `CFBundleShortVersionString`（Info.plist + project.yml）：`1.0.0`
-- 发布版本号（`Scripts/build-all.sh` 第一个参数）：默认 `1.1.0`
+- 发布版本号（`scripts/build/build-all.sh` 第一个参数）：默认 `1.1.0`
 - 两者不一致是历史遗留，新的发布流程以 `build-all.sh` 的 `VERSION` 为准
 
 详见 `07-build-release.md`。

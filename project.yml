@@ -1,6 +1,6 @@
 name: Meilink
 options:
-  bundleIdPrefix: com.meilink
+  bundleIdPrefix: pub.mei.meilink
   deploymentTarget:
     macOS: "13.0"
   xcodeVersion: "15.0"
@@ -16,13 +16,13 @@ targets:
     type: application
     platform: macOS
     sources:
-      - Meilink
+      - client/macos-native
     info:
-      path: Meilink/Info.plist
+      path: client/macos-native/Info.plist
       properties:
         CFBundleName: Meilink
         CFBundleDisplayName: Meilink
-        CFBundleIdentifier: vip.rego.meilink
+        CFBundleIdentifier: pub.mei.meilink
         CFBundleIconFile: AppIcon
         CFBundleVersion: "1.0"
         CFBundleShortVersionString: "1.0.0"
@@ -32,12 +32,12 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Meilink
-        INFOPLIST_FILE: Meilink/Info.plist
+        INFOPLIST_FILE: client/macos-native/Info.plist
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: true
         COMBINE_HIDPI_IMAGES: true
     preBuildScripts:
       - name: Download frpc
         script: |
-          bash "${SRCROOT}/Scripts/download-frpc.sh"
+          bash "${SRCROOT}/scripts/assets/download-frpc.sh"
         runOnlyWhenInstalling: false

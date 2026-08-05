@@ -4,7 +4,7 @@
 
 ## 客户端版本
 
-Meilink 提供三种客户端实现：
+Meilink 提供以下客户端实现：
 
 ### 1. macOS 原生客户端（特色版本）
 
@@ -15,7 +15,7 @@ Meilink 提供三种客户端实现：
 - 实时隧道状态监控与自动重连
 - 要求 macOS 13.0+
 
-详见 `Meilink/` 目录。
+详见 `client/macos-native/` 目录。
 
 ### 2. 跨平台桌面客户端（Tauri v2，推荐）
 
@@ -31,22 +31,20 @@ Meilink 提供三种客户端实现：
 
 ```bash
 # 构建（需 Node.js + Rust/Cargo + Go）
-cd cross-platform-client/desktop
+cd client/desktop
 npm install
-bash ../../Scripts/build-desktop.sh --copy   # 构建 + 复制 DMG 到 release/
+bash ../../scripts/build/build-desktop.sh --copy   # 构建 + 复制 DMG 到 release/client/desktop/
 ```
 
-详见 `cross-platform-client/desktop/` 目录。
+详见 `client/desktop/` 目录。
 
-### 3. 跨平台 CLI 客户端（Go，轻量备选）
+### 3. Docker 客户端（容器化 frpc）
 
-基于 **Go** 的命令行客户端，支持 **Windows、Linux、macOS**。无 GUI，适合服务器/无头环境。
+基于 **Node.js + TypeScript** 的容器化 frpc 客户端，在 Docker 里跑 frpc，提供 Web 管理 UI。适合 NAS、家庭服务器、不想装原生客户端的场景。
 
-- 前台运行 + Web UI（浏览器管理）
-- 自动下载对应平台的 frpc 二进制
-- 支持 systemd / Windows Service 注册
+> ⚠️ Docker 客户端（跑 frpc，把本地服务暴露出去）和 [服务端 Docker](server/)（跑 frps，公网中转）是**两回事**，别混淆。
 
-详见 `cross-platform-client/` 目录。
+详见 `client/docker/` 目录。
 
 ## 快速开始
 
@@ -69,24 +67,25 @@ auth.token = "YOUR_SECRET_TOKEN"
 **方式一：Shell 脚本（传统方式）**
 
 ```bash
-./deploy-frps.sh           # 安装或更新 frps，并启动服务
-./deploy-frps.sh start     # 启动服务
-./deploy-frps.sh stop      # 停止服务
-./deploy-frps.sh restart   # 重启服务
-./deploy-frps.sh status    # 查看状态
+cd server/bare-metal
+bash deploy-frps.sh           # 安装或更新 frps，并启动服务
+bash deploy-frps.sh start     # 启动服务
+bash deploy-frps.sh stop      # 停止服务
+bash deploy-frps.sh restart   # 重启服务
+bash deploy-frps.sh status    # 查看状态
 ```
 
 **方式二：引导式 Go 程序（推荐，支持多域名/多 token）**
 
 ```bash
 # 从 release 目录直接使用预编译二进制
-tar xzf release/meilink-setup-1.1.0-linux-amd64.tar.gz
+tar xzf release/server/meilink-setup-1.1.0-linux-amd64.tar.gz
 cd meilink-setup-1.1.0-linux-amd64
 sudo ./meilink-setup            # 交互式菜单
 
 # 或自行从源码编译
-cd cross-platform-client
-go build -o meilink-setup ./cmd/meilink-setup
+cd server/setup
+go build -o meilink-setup .
 sudo ./meilink-setup
 ```
 
@@ -111,6 +110,10 @@ sudo ./meilink-setup upgrade            # 升级 frps 并重启所有实例
 docker compose up -d
 ```
 
+仓库提供两套 Docker 服务端方案：`server/docker-compose/`（裸 frps，第三方镜像）和
+`server/docker-managed/`（frps + Web 管理页一体镜像，自构建）。完整的选型、
+配置、启动、反代与运维操作见 [docs/guides/deploy-docker.md](docs/guides/deploy-docker.md)。
+
 ### DNS 配置
 
 在域名管理处添加泛解析记录：
@@ -130,59 +133,46 @@ xcodegen generate
 swift build
 ```
 
-### 跨平台 Go 客户端
+### 跨平台桌面客户端（Tauri）
 
 ```bash
-cd cross-platform-client
-
-# 当前平台（入口是根包 main.go，导入 cmd/meilink）
-go build -o meilink .
-
-# 交叉编译
-GOOS=windows GOARCH=amd64 go build -o meilink-windows-amd64.exe .
-GOOS=linux   GOARCH=arm64 go build -o meilink-linux-arm64    .
-GOOS=darwin  GOARCH=arm64 go build -o meilink-darwin-arm64   .
-
-# 交互式配置
-./meilink setup
-
-# 启动客户端
-./meilink start --listen :7400
-
-# 访问 Web UI
-open http://localhost:7400
+# 构建（需 Node.js + Rust/Cargo + Go）
+cd client/desktop
+npm install
+bash ../../scripts/build/build-desktop.sh --copy   # 构建 + 复制产物到 release/client/desktop/
 ```
 
 ## 项目结构
 
 ```
 mei-link/
-├── Meilink/                    # macOS 原生客户端（Swift AppKit）
-│   ├── App/                    # 应用入口
-│   ├── Core/                   # 隧道管理、frpc 进程控制
-│   ├── Models/                 # 数据模型
-│   ├── Storage/                # Keychain + JSON 持久化
-│   ├── UI/                     # Menu Bar、设置、向导
-│   └── Utils/                  # 网络、日志等工具
+├── client/                     # 客户端（frpc）合集
+│   ├── macos-native/           # macOS 原生客户端（Swift AppKit）
+│   │   ├── App/                # 应用入口
+│   │   ├── Core/               # 隧道管理、frpc 进程控制
+│   │   ├── Models/             # 数据模型
+│   │   ├── Storage/            # Keychain + JSON 持久化
+│   │   ├── UI/                 # Menu Bar、设置、向导
+│   │   └── Utils/              # 网络、日志等工具
+│   ├── desktop/                # 跨平台桌面客户端（Tauri v2，Win/Linux/macOS）
+│   │   ├── sidecar/            # Go sidecar 源码（桌面客户端专属后端，非独立 CLI）
+│   │   ├── src/                # 前端（HTML/CSS/ES）
+│   │   └── src-tauri/          # Rust 壳（托盘/窗口/生命周期）
+│   └── docker/                 # Docker 客户端（容器化 frpc + Web 管理，Node/TS）
 │
-├── cross-platform-client/      # 跨平台 Go 客户端（新增）
-│   ├── cmd/
-│   │   ├── meilink/            # 主程序 CLI 入口
-│   │   └── meilink-setup/      # VPS 部署引导程序
-│   ├── internal/
-│   │   ├── config/             # 配置管理 + frpc.toml 生成
-│   │   ├── frpc/               # frpc 进程管理 + 自动下载 + Admin API
-│   │   ├── tunnel/             # 隧道 CRUD 管理
-│   │   ├── web/                # Web UI 服务 + HTML 模板
-│   │   └── service/            # 系统服务注册
-│   ├── assets/                 # 静态资源
-│   ├── build.sh                # 构建脚本
-│   └── README.md
+├── server/                     # 服务端（frps）实现合集
+│   ├── docker-compose/         # 方案①：裸 frps（第三方镜像 + 手写 toml）
+│   ├── docker-managed/         # 方案②：frps + Web 管理页一体镜像（自构建）
+│   ├── setup/                  # 方案③：Go 多 profile 部署工具（meilink-setup）
+│   └── bare-metal/             # 方案④：Shell 单实例一键部署
 │
-├── Scripts/                    # 开发辅助脚本
-├── deploy-frps.sh              # 传统 frps 部署脚本
-├── docker-compose.yml          # Docker 部署配置
-└── frps.toml                   # frps 示例配置
+├── scripts/                    # 开发辅助脚本
+├── release/                    # 发布产物输出（对齐 client/server 结构）
+│   ├── client/                 #   客户端产物（macos-native/ + desktop/）
+│   └── server/                 #   服务端产物（meilink-setup-*.tar.gz）
+├── docs/                       # 设计文档（SDD + rules + 部署手册）
+├── Package.swift               # SwiftPM 配置（仓库根）
+└── project.yml                 # XcodeGen 配置（仓库根）
 ```
 
 ## 系统要求

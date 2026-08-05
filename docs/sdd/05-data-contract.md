@@ -6,7 +6,7 @@
 
 ### 1.1 macOS 原生客户端
 - 目录：`~/Library/Application Support/Meilink/`
-- 实现：<kfile name="TunnelStore.swift" path="Meilink/Storage/TunnelStore.swift">TunnelStore.swift</kfile>
+- 实现：<kfile name="TunnelStore.swift" path="client/macos-native/Storage/TunnelStore.swift">TunnelStore.swift</kfile>
 - 创建：`init` 时 `createDirectory(withIntermediateDirectories: true)`
 - 文件列表：
   | 文件 | 用途 | 读写 |
@@ -19,7 +19,7 @@
 
 ### 1.2 跨平台客户端
 - macOS：同上，共享 `~/Library/Application Support/Meilink/`
-- Windows / Linux：`~/.meilink/`（详见 `cross-platform-client/internal/config/`，本次未深入）
+- Windows / Linux：`~/.meilink/`（详见 `client/desktop/sidecar/internal/config/`，本次未深入）
 
 ## 2. `tunnels.json` Schema
 
@@ -90,17 +90,17 @@
 
 ## 5. Keychain 契约
 
-- service: `com.meilink`
+- service: `pub.mei.meilink`
 - account: `auth-token`（当前仅此一个 key）
 - accessible: `kSecAttrAccessibleWhenUnlocked`
 - 写入：先 `SecItemDelete` 再 `SecItemAdd`（覆盖式）
-- 实现：<kfile name="KeychainHelper.swift" path="Meilink/Storage/KeychainHelper.swift">KeychainHelper.swift</kfile>
+- 实现：<kfile name="KeychainHelper.swift" path="client/macos-native/Storage/KeychainHelper.swift">KeychainHelper.swift</kfile>
 
 > 跨平台无 Keychain 时，token 直接从 `config.json` 读，文件权限 0600。
 
 ## 6. frpc.toml 生成规则
 
-实现：<kfile name="ConfigGenerator.swift" path="Meilink/Core/ConfigGenerator.swift">ConfigGenerator.swift</kfile>。
+实现：<kfile name="ConfigGenerator.swift" path="client/macos-native/Core/ConfigGenerator.swift">ConfigGenerator.swift</kfile>。
 
 ### 6.1 模板（frp v0.70.0 schema）
 ```toml
@@ -138,7 +138,7 @@ path = "<Application Support>/Meilink/store.json"
 
 ## 7. Proxy 增删改（Store API）
 
-实现：<kfile name="FrpcAdminAPI.swift" path="Meilink/Core/FrpcAdminAPI.swift">FrpcAdminAPI.swift</kfile> + <kfile name="Tunnel.swift" path="Meilink/Models/Tunnel.swift">Tunnel.swift</kfile> 的 `toProxyDefinition`。
+实现：<kfile name="FrpcAdminAPI.swift" path="client/macos-native/Core/FrpcAdminAPI.swift">FrpcAdminAPI.swift</kfile> + <kfile name="Tunnel.swift" path="client/macos-native/Models/Tunnel.swift">Tunnel.swift</kfile> 的 `toProxyDefinition`。
 
 ### 7.1 `ProxyDefinition` 结构
 ```swift
@@ -211,7 +211,7 @@ baseURL: `http://127.0.0.1:<adminPort>`，Basic Auth。
 
 ## 8A. 跨平台 Go sidecar HTTP API
 
-跨平台桌面客户端的 Tauri 壳通过本地 HTTP API 调用 Go sidecar（`cross-platform-client/internal/web/server.go`）。baseURL 通过 `sidecar.port` 文件动态发现。Swift 原生客户端**不**使用这套 API（它直接调 frpc Admin API + 持久化文件），但跨平台客户端的 API 契约需要与 Swift 行为对齐。
+跨平台桌面客户端的 Tauri 壳通过本地 HTTP API 调用 Go sidecar（`client/desktop/sidecar/internal/web/server.go`）。baseURL 通过 `sidecar.port` 文件动态发现。Swift 原生客户端**不**使用这套 API（它直接调 frpc Admin API + 持久化文件），但跨平台客户端的 API 契约需要与 Swift 行为对齐。
 
 ### 8A.1 端点列表
 | Method | Path | 用途 |
@@ -236,7 +236,7 @@ baseURL: `http://127.0.0.1:<adminPort>`，Basic Auth。
 - GET 返回 `{"enabled": bool, "available": bool}`：`available` 报告当前平台是否支持
 - POST body `{"enabled": true}` 注册，`{"enabled": false}` 注销
 - 平台实现：
-  - macOS：写 `~/Library/LaunchAgents/com.meilink.client.plist` + `launchctl load/unload`
+  - macOS：写 `~/Library/LaunchAgents/pub.mei.meilink.client.plist` + `launchctl load/unload`
   - Linux：写 `~/.config/systemd/user/meilink-client.service` + `systemctl --user enable/disable`
   - Windows：注册表 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 写 `Meilink` 值
   - 其他平台：返回 501
@@ -244,7 +244,7 @@ baseURL: `http://127.0.0.1:<adminPort>`，Basic Auth。
 
 ## 9. frps 服务端配置契约
 
-### 9.1 `frps.toml` 必填字段（`deploy-frps.sh` 校验）
+### 9.1 `frps.toml` 必填字段（`server/bare-metal/deploy-frps.sh` 校验）
 - `bindPort` — 客户端连接端口
 - `vhostHTTPPort` — HTTP 子域名访问端口
 - `vhostHTTPSPort` — HTTPS 子域名访问端口
@@ -255,7 +255,7 @@ baseURL: `http://127.0.0.1:<adminPort>`，Basic Auth。
 - `webServer.addr` / `webServer.port` / `webServer.user` / `webServer.password` — frps Dashboard
 
 ### 9.3 示例
-见 <kfile name="frps.toml" path="frps.toml">frps.toml</kfile> 与 <kfile name="frps.toml.example" path="Meilink/Resources/frps.toml.example">frps.toml.example</kfile>。
+见 <kfile name="frps.toml" path="server/docker-compose/frps.toml">server/docker-compose/frps.toml</kfile> 与 <kfile name="frps.toml.example" path="client/macos-native/Resources/frps.toml.example">frps.toml.example</kfile>。
 
 ## 10. DNS 契约
 
@@ -292,6 +292,6 @@ baseURL: `http://127.0.0.1:<adminPort>`，Basic Auth。
 
 - `CFBundleShortVersionString`: `1.0.0`（Info.plist + project.yml）
 - `CFBundleVersion`: `1.0`
-- `CFBundleIdentifier`: `vip.rego.meilink`（Swift 原生）/ `vip.rego.meilink.go`（Go 打包的 .app）
-- frp 版本：`v0.70.0`（硬编码在 `Scripts/download-frpc.sh` / `Scripts/build-frpc.sh` / `deploy-frps.sh`）
-- 发布版本号：`1.1.0`（`Scripts/build-all.sh` 默认参数，可覆盖）
+- `CFBundleIdentifier`: `pub.mei.meilink`（Swift 原生；Tauri 桌面客户端的 bundleId 见 `client/desktop/src-tauri/tauri.conf.json`）
+- frp 版本：`v0.70.0`（硬编码在六处：`scripts/assets/download-frpc.sh` / `scripts/build/build-frpc.sh` / `scripts/build/build-desktop.sh` / `server/bare-metal/deploy-frps.sh` / `server/docker-managed/Dockerfile` / `server/setup/main.go`）
+- 发布版本号：`1.1.0`（`scripts/build/build-all.sh` 默认参数，可覆盖）

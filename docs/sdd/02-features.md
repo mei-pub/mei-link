@@ -6,7 +6,7 @@
 
 ### F1.1 首次配置向导
 - **入口**：`MenuBarView.onAppear` 检测 `!manager.isConfigured` 自动打开 Setup 窗口。
-- **实现**：<kfile name="SetupView.swift" path="Meilink/UI/Setup/SetupView.swift">SetupView.swift</kfile>
+- **实现**：<kfile name="SetupView.swift" path="client/macos-native/UI/Setup/SetupView.swift">SetupView.swift</kfile>
 - **字段**：服务器地址、端口（默认 7000）、认证 Token、子域名基域、TLS 开关。
 - **动作**：
   - "测试连接" → `NetworkHelper.testConnection`（TCP 握手 5s 超时）
@@ -15,7 +15,7 @@
 
 ### F1.2 设置面板
 - **入口**：主窗口"设置"按钮 / 菜单栏"设置"按钮。
-- **实现**：<kfile name="SettingsView.swift" path="Meilink/UI/Settings/SettingsView.swift">SettingsView.swift</kfile>
+- **实现**：<kfile name="SettingsView.swift" path="client/macos-native/UI/Settings/SettingsView.swift">SettingsView.swift</kfile>
 - **分组**：
   - 服务器配置：地址、客户端端口、管理端口（Admin API 端口）、Token（可显隐切换）、子域名基域、TLS。
   - 应用设置：开机自启、菜单栏图标（5 选 1）、远程探测间隔（30-600s Stepper）、完全退出。
@@ -28,21 +28,21 @@
 
 ### F1.3 DNS 引导
 - **入口**：暂未直接挂到任何按钮（独立组件，待接线）。
-- **实现**：<kfile name="DNSGuideView.swift" path="Meilink/UI/Setup/DNSGuideView.swift">DNSGuideView.swift</kfile>
+- **实现**：<kfile name="DNSGuideView.swift" path="client/macos-native/UI/Setup/DNSGuideView.swift">DNSGuideView.swift</kfile>
 - **内容**：展示 A 记录泛解析 `*.<subDomainHost>` → VPS IP 的指引。
 
 ## F2 · 隧道管理（CRUD）
 
 ### F2.1 隧道列表
 - **入口**：主窗口 `MainWindow`。
-- **实现**：<kfile name="MainWindow.swift" path="Meilink/UI/Main/MainWindow.swift">MainWindow.swift</kfile> + <kfile name="TunnelListRow.swift" path="Meilink/UI/Main/TunnelListRow.swift">TunnelListRow.swift</kfile>
+- **实现**：<kfile name="MainWindow.swift" path="client/macos-native/UI/Main/MainWindow.swift">MainWindow.swift</kfile> + <kfile name="TunnelListRow.swift" path="client/macos-native/UI/Main/TunnelListRow.swift">TunnelListRow.swift</kfile>
 - **列**：状态圆点 + 名称 / 类型 + 本地地址 / 外网访问 + 状态文案 + 复制按钮 + 打开按钮 + 启用 Toggle + 操作 Menu。
 - **空状态**：`manager.tunnels.isEmpty` 时显示"还没有隧道"+添加按钮。
 - **页脚**：添加隧道按钮 + `启用/总数` 统计 + 查看日志 + 清空日志。
 
 ### F2.2 隧道编辑
 - **入口**：主窗口"添加隧道" / 列表行"编辑" / 菜单栏"添加"（跳到主窗口）。
-- **实现**：<kfile name="TunnelEditView.swift" path="Meilink/UI/Main/TunnelEditView.swift">TunnelEditView.swift</kfile>
+- **实现**：<kfile name="TunnelEditView.swift" path="client/macos-native/UI/Main/TunnelEditView.swift">TunnelEditView.swift</kfile>
 - **字段**：
   - 基本信息：名称、类型（HTTP/HTTPS/TCP/UDP 分段选择器）
   - 本地配置：本地端口、本地地址（默认 `127.0.0.1`）
@@ -52,7 +52,7 @@
 - **保存**：编辑走 `manager.updateTunnel`，新增走 `manager.addTunnel`，均 `reload` frpc。
 
 ### F2.3 隧道增删改的后端
-- **实现**：<kfile name="TunnelManager.swift" path="Meilink/Core/TunnelManager.swift">TunnelManager.swift</kfile>
+- **实现**：<kfile name="TunnelManager.swift" path="client/macos-native/Core/TunnelManager.swift">TunnelManager.swift</kfile>
 - **API 路径**：
   - `addTunnel` → `adminAPI.createProxy` + `reload`
   - `updateTunnel` → `adminAPI.updateProxy` + `reload`
@@ -105,7 +105,7 @@
 
 ### F4.2 远程探活
 - **触发**：`shouldProbeReachability` — 距上次探活 ≥ `clamp(remoteReachabilityInterval, 30, 600)` 秒。
-- **实现**：<kfile name="TunnelReachabilityProbe.swift" path="Meilink/Core/TunnelReachabilityProbe.swift">TunnelReachabilityProbe.swift</kfile>
+- **实现**：<kfile name="TunnelReachabilityProbe.swift" path="client/macos-native/Core/TunnelReachabilityProbe.swift">TunnelReachabilityProbe.swift</kfile>
 - **协议**：TCP 握手（`NWConnection`），4s 超时。
 - **类型差异**：
   - HTTP → 远端 host:80
@@ -124,7 +124,7 @@
 ## F5 · 菜单栏
 
 ### F5.1 状态图标
-- **实现**：`StatusBarController.updateButton` + <kfile name="MenuBarStatusItem.swift" path="Meilink/UI/MenuBar/MenuBarStatusItem.swift">MenuBarStatusItem.swift</kfile>
+- **实现**：`StatusBarController.updateButton` + <kfile name="MenuBarStatusItem.swift" path="client/macos-native/UI/MenuBar/MenuBarStatusItem.swift">MenuBarStatusItem.swift</kfile>
 - **风格**：5 种 PNG 图标（`portal` / `topology` / `arrow-ring` / `waveform` / `relay`），从 `Bundle.main` 加载，18×18，`isTemplate = true`。
 - **状态映射**：
   - `isConnected = true` → 图标着色绿
@@ -142,7 +142,7 @@
 - **自动关闭**：`installEventMonitors` 监听 local + global 鼠标按下事件，点面板外即关。
 
 ### F5.3 面板内容
-- **实现**：<kfile name="MenuBarView.swift" path="Meilink/UI/MenuBar/MenuBarView.swift">MenuBarView.swift</kfile>
+- **实现**：<kfile name="MenuBarView.swift" path="client/macos-native/UI/MenuBar/MenuBarView.swift">MenuBarView.swift</kfile>
 - **结构**：
   - 状态头：状态圆点 + 标题 + 服务器副标题 + 启停按钮
   - 启用的隧道列表：每条一个卡片（名称、状态、路由、复制/打开按钮）
@@ -151,7 +151,7 @@
 ## F6 · 多窗口
 
 ### F6.1 窗口清单
-- **实现**：<kfile name="AppRuntime.swift" path="Meilink/App/AppRuntime.swift">AppRuntime.swift</kfile> 的 `AppWindowController`
+- **实现**：<kfile name="AppRuntime.swift" path="client/macos-native/App/AppRuntime.swift">AppRuntime.swift</kfile> 的 `AppWindowController`
 - **窗口**：
   | 窗口 | 标题 | 尺寸 | 内容视图 |
   |---|---|---|---|
@@ -170,7 +170,7 @@
 ## F7 · 日志
 
 ### F7.1 事件日志
-- **实现**：<kfile name="LogWindowView.swift" path="Meilink/UI/Main/LogWindowView.swift">LogWindowView.swift</kfile> + `TunnelManager.events`
+- **实现**：<kfile name="LogWindowView.swift" path="client/macos-native/UI/Main/LogWindowView.swift">LogWindowView.swift</kfile> + `TunnelManager.events`
 - **来源**：
   - `addEvent` 手动记录（连接检测、自动重连、隧道 CRUD、配置保存等）
   - `frpcProcess.onOutput` 把 frpc stdout/stderr 每行作为 `frpc: <line>` 事件
@@ -196,14 +196,14 @@
 | `menuBarIconStyle` | .portal | 菜单栏图标风格 |
 
 ### F8.2 开机自启
-- **实现**：<kfile name="AutoStartManager.swift" path="Meilink/Utils/AutoStartManager.swift">AutoStartManager.swift</kfile>
+- **实现**：<kfile name="AutoStartManager.swift" path="client/macos-native/Utils/AutoStartManager.swift">AutoStartManager.swift</kfile>
 - **API**：`SMAppService.mainApp.register/unregister`，`status == .enabled` 判断已启用。
 - **触发**：SettingsView 的"开机自启动"Toggle `onChange` 即时注册/注销。
 
 #### 跨平台客户端对齐
 - **API 端点**：`GET /api/autostart` 返回 `{enabled, available}`；`POST /api/autostart {enabled}` 注册/注销
-- **平台实现**（`cross-platform-client/internal/autostart/`）：
-  - macOS：写 `~/Library/LaunchAgents/com.meilink.client.plist` + `launchctl load/unload`
+- **平台实现**（`client/desktop/sidecar/internal/autostart/`）：
+  - macOS：写 `~/Library/LaunchAgents/pub.mei.meilink.client.plist` + `launchctl load/unload`
   - Linux：写 `~/.config/systemd/user/meilink-client.service` + `systemctl --user enable/disable`
   - Windows：注册表 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 写 `Meilink` 值
   - 其他平台：`available: false`，前端禁用 Toggle
@@ -212,24 +212,24 @@
 ## F9 · 服务端部署
 
 ### F9.1 Shell 脚本部署
-- **入口**：`./deploy-frps.sh [deploy|start|stop|restart|status|help]`。
-- **实现**：<kfile name="deploy-frps.sh" path="deploy-frps.sh">deploy-frps.sh</kfile>
+- **入口**：`bash server/bare-metal/deploy-frps.sh [deploy|start|stop|restart|status|help]`。
+- **实现**：<kfile name="server/bare-metal/deploy-frps.sh" path="server/bare-metal/deploy-frps.sh">server/bare-metal/deploy-frps.sh</kfile>
 - **流程**：校验 `frps.toml` → 下载 frp v0.70.0 linux 二进制 → 安装到 `/usr/local/bin/frps` → 配置到 `/etc/frps/frps.toml`（0600）→ 写 `/etc/systemd/system/frps.service` → `systemctl enable --now frps`。
 - **校验项**：`bindPort` / `vhostHTTPPort` / `vhostHTTPSPort` 必填，`subDomainHost` 不能是默认占位，`auth.token` 不能是默认占位。
 
 ### F9.2 meilink-setup 多 profile 部署
 - **入口**：`sudo ./meilink-setup [setup|add|list|start|stop|restart|status|upgrade]`。
-- **实现**：`cross-platform-client/cmd/meilink-setup`（本次未读源码，描述来自 README + build-all.sh 第 169-195 行的产物说明）。
+- **实现**：<kfile name="main.go" path="server/setup/main.go">server/setup/main.go</kfile>（独立 Go module）。
 - **能力**：每个 profile = 一个域名 + 一个 token + 一个独立的 `frps-<name>.service`，端口从 7000 递增，`systemctl enable --now` 确保开机自启。
 
 ### F9.3 Docker 部署
-- **入口**：`docker compose up -d`。
-- **实现**：<kfile name="docker-compose.yml" path="docker-compose.yml">docker-compose.yml</kfile>
-- **镜像**：`snowdreamtech/frps:latest`，挂载 `./frps.toml`，暴露 7000 / 8080 / 8443。
+- **入口**：`docker compose up -d`（在 `server/docker-compose/` 目录内）。
+- **实现**：<kfile name="docker-compose.yml" path="server/docker-compose/docker-compose.yml">server/docker-compose/docker-compose.yml</kfile>
+- **镜像**：`snowdreamtech/frps:latest`，挂载同目录 `frps.toml`，暴露 7000 / 8080 / 8443。
 
 ### F9.4 Docker 服务端管理页
 
-- **入口**：`cross-platform-client/server-docker/`。单一 `meilink-server:latest` 镜像同时运行 Node 管理页与 frps，适用于 NAS 的“导入镜像并创建容器”流程，不依赖 Docker Compose。
+- **入口**：`server/docker-managed/`。单一 `meilink-server:latest` 镜像同时运行 Node 管理页与 frps，适用于 NAS 的“导入镜像并创建容器”流程，不依赖 Docker Compose。
 - **认证**：`MEILINK_ADMIN_USER` 与 `MEILINK_ADMIN_PASSWORD` 为必填环境变量。账号密码不持久化到 `/data`，容器重启后仍以环境变量为准。
 - **能力**：管理 `bindPort`、HTTP/HTTPS vhost 端口、FRP Token、运行状态与日志；保存配置会原子写入 `/data/frps.toml` 并重启 frps。
 - **多域名**：frps 仅允许一个 `subDomainHost`，故服务端保存一个主域名和任意数量的额外域名/泛域名目录。主域名使用客户端 `subdomain`；额外域名和泛域名使用 HTTP/HTTPS 隧道的 `customDomains`。额外域名不得位于主域名的子域名空间内。
@@ -239,21 +239,19 @@
 ### F10.1 macOS 原生客户端构建
 - **方式 A（XcodeGen + Xcode）**：`xcodegen generate` → `xcodebuild`。
 - **方式 B（SwiftPM）**：`swift build`。
-- **frpc 集成**：`project.yml` 的 `preBuildScripts` 调 `Scripts/download-frpc.sh`，下载 frpc 到 `.app/Contents/MacOS/frpc`。
-- **图标**：`Meilink/Resources/AppIcon.icns` + `Assets.xcassets`。
+- **frpc 集成**：`project.yml` 的 `preBuildScripts` 调 `scripts/assets/download-frpc.sh`，下载 frpc 到 `.app/Contents/MacOS/frpc`。
+- **图标**：`client/macos-native/Resources/AppIcon.icns` + `Assets.xcassets`。
 - **配置**：`LSUIElement = true`（不显示 Dock）、`LSMinimumSystemVersion = 13.0`、`ENABLE_HARDENED_RUNTIME = true`、`CODE_SIGN_STYLE = Automatic`。
 
-### F10.2 跨平台发布（`Scripts/build-all.sh`）
-- **产物**：
-  - `meilink-<ver>-linux-amd64.tar.gz` / `linux-arm64.tar.gz`（含桌面集成：图标/.desktop/install.sh）
-  - `meilink-<ver>-darwin-amd64.dmg` / `darwin-arm64.dmg`（Go 客户端包成 .app + DMG）
-  - `meilink-<ver>-windows-amd64.zip`（单 exe 嵌入图标）
-  - `meilink-setup-<ver>-linux-amd64.tar.gz` / `linux-arm64.tar.gz`
-  - `meilink-<ver>-macOS-native.dmg`（Swift 原生客户端 DMG）
+### F10.2 全产物编排（`scripts/build/build-all.sh`）
+本地一键脚本，按三个阶段把全部产物输出到 `release/`（按 client/server 子目录组织）：
+- **Tauri 桌面客户端**（委托 `build-desktop.sh`）：`release/client/desktop/meilink-desktop-<ver>-<goos>-<goarch>.{dmg|msi|deb|AppImage}`
+- **服务端 setup 工具**（交叉编译 `server/setup/`）：`release/server/meilink-setup-<ver>-linux-{amd64,arm64}.tar.gz`
+- **macOS 原生 DMG**（xcodebuild 优先，回退 SwiftPM + 预构建 bundle）：`release/client/macos-native/meilink-<ver>-macos-native.dmg`
 - **版本号**：默认 `1.1.0`，可作第一个参数覆盖。
-- **图标生成**：`Scripts/gen-icons.sh` 从 `Meilink/Resources/AppIcon.png` 派生 Windows ICO + .syso + Linux PNG。
+- **图标生成**：`scripts/assets/gen-icons.sh` 是独立工具脚本，从 `client/macos-native/Resources/AppIcon.png` 派生 Windows ICO + `.syso` + Linux PNG，输出到 `client/desktop/sidecar/`（供桌面客户端构建使用，不再由 `build-all.sh` 主流程调用）。
 
-### F10.3 Tauri 桌面客户端构建（`Scripts/build-desktop.sh`）
+### F10.3 Tauri 桌面客户端构建（`scripts/build/build-desktop.sh`）
 - **流程**：
   1. Go 交叉编译 sidecar 二进制（按 target-triple 命名）到 `desktop/src-tauri/binaries/`
   2. `npm install` + `npx vite build`

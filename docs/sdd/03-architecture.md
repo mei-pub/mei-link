@@ -1,6 +1,6 @@
 # Meilink SDD · 03 · 技术架构
 
-> 本文描述 Meilink macOS 原生客户端的运行时架构、对象关系、状态机、并发模型与自动恢复策略。事实基线：`Meilink/` 下的 Swift 实现。
+> 本文描述 Meilink macOS 原生客户端的运行时架构、对象关系、状态机、并发模型与自动恢复策略。事实基线：`client/macos-native/` 下的 Swift 实现。
 
 ## 1. 全局运行时拓扑
 
@@ -36,7 +36,7 @@ flowchart TD
     AdminAPI -.HTTP.-> FrpcSubprocess
 ```
 
-引用：<kfile name="AppRuntime.swift" path="Meilink/App/AppRuntime.swift">AppRuntime.swift</kfile> / <kfile name="TunnelManager.swift" path="Meilink/Core/TunnelManager.swift">TunnelManager.swift</kfile>。
+引用：<kfile name="AppRuntime.swift" path="client/macos-native/App/AppRuntime.swift">AppRuntime.swift</kfile> / <kfile name="TunnelManager.swift" path="client/macos-native/Core/TunnelManager.swift">TunnelManager.swift</kfile>。
 
 ## 2. 启动序列
 
@@ -73,7 +73,7 @@ sequenceDiagram
 
 ## 3. 核心对象职责
 
-### 3.1 `MeilinkAppDelegate`（<kfile name="MeilinkApp.swift" path="Meilink/App/MeilinkApp.swift">MeilinkApp.swift</kfile>）
+### 3.1 `MeilinkAppDelegate`（<kfile name="MeilinkApp.swift" path="client/macos-native/App/MeilinkApp.swift">MeilinkApp.swift</kfile>）
 - 单例式 `@MainActor` 入口
 - 控制生命周期：`disableAutomaticTermination` / `disableSuddenTermination` 防后台杀
 - `allowQuit` 静态标志：默认 `false`，`applicationShouldTerminate` 返回 `terminateCancel`；只有用户显式退出时设 `true`
@@ -104,7 +104,7 @@ sequenceDiagram
 - stdout/stderr 通过 `Pipe.readabilityHandler` 异步按行回调
 - `terminationHandler` 在主线程派发 `onTermination`
 
-#### 跨平台 Go 实现对齐（`cross-platform-client/internal/frpc/process.go`）
+#### 跨平台 Go 实现对齐（`client/desktop/sidecar/internal/frpc/process.go`）
 Go 端 `Process` 同样提供 `OnOutput func(line string)` 与 `OnTermination func(status int)` 回调：
 - `Start` 用 `io.Pipe` + `bufio.Scanner` 按行扫描 stdout/stderr，trim 后非空行回调 `OnOutput`
 - 开 goroutine 调 `cmd.Wait()`，结束后调 `OnTermination(status)`（status != 0 表示异常退出）
@@ -127,13 +127,13 @@ Go 端 `Process` 同样提供 `OnOutput func(line string)` 与 `OnTermination fu
 - 写文件后 `setAttributes posixPermissions: 0o600`
 
 ### 3.7 `TunnelStore`（值类型）
-- 目录：`<Application Support>/Meilink/`
+- 目录：`~/Library/Application Support/Meilink/`
 - 文件：`tunnels.json` / `config.json` / `settings.json` / `frpc.toml`（运行期生成）/ `store.json`（frpc 写）
 - 编码：`JSONEncoder` ISO8601 日期 + prettyPrinted；`JSONDecoder` ISO8601 日期
 - 容错：load 失败返回默认值（空数组 / nil / AppSettings()）
 
 ### 3.8 `KeychainHelper`（静态）
-- service = `com.meilink`
+- service = `pub.mei.meilink`
 - `kSecAttrAccessible = kSecAttrAccessibleWhenUnlocked`
 - 保存前先 `SecItemDelete` 再 `SecItemAdd`（覆盖式）
 - 当前仅用于 `auth-token`（`TunnelManager.saveConfiguration` 时同步写）
@@ -163,7 +163,7 @@ stateDiagram-v2
     closed --> waitStart: toggleTunnel(true) / 重启恢复
 ```
 
-状态来源：<kfile name="Tunnel.swift" path="Meilink/Models/Tunnel.swift">Tunnel.swift</kfile> 的 `TunnelStatus`，从 frpc Admin API 的 `status` 字段映射：
+状态来源：<kfile name="Tunnel.swift" path="client/macos-native/Models/Tunnel.swift">Tunnel.swift</kfile> 的 `TunnelStatus`，从 frpc Admin API 的 `status` 字段映射：
 
 | frpc phase | TunnelStatus | displayName | tintColor |
 |---|---|---|---|
@@ -273,7 +273,7 @@ flowchart TD
 
 ## 9. 跨平台架构对齐
 
-跨平台客户端（`cross-platform-client/`）的架构原则（来自 `docs/superpowers/specs/2026-07-24-cross-platform-native-alignment-design.md`）：
+跨平台客户端（`client/desktop/sidecar/`）的架构原则（来自 `docs/archive/2026-07-24-cross-platform-native-alignment-design.md`）：
 
 - **Go 是事实来源**：持久化、frpc 配置生成、frpc 进程控制、Store API、本地 HTTP API 全部由 Go sidecar 拥有
 - **Tauri 拥有桌面壳**：sidecar 启动、API 发现、托盘、Dock 策略、popover 几何、WebView 窗口
@@ -281,4 +281,4 @@ flowchart TD
 - **macOS 共享目录**：`~/Library/Application Support/Meilink`，与原生客户端互通
 - **其他平台默认目录**：`~/.meilink`
 
-详见 [06-constraints.md](./06-constraints.md) 的"跨平台兼容"一节与 [../agent-rules/cross-platform-compat.md](../agent-rules/cross-platform-compat.md)。
+详见 [06-constraints.md](./06-constraints.md) 的"跨平台兼容"一节与 [../rules/cross-platform-compat.md](../rules/cross-platform-compat.md)。

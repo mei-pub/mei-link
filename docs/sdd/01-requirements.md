@@ -1,6 +1,6 @@
 # Meilink SDD · 01 · 用户需求
 
-> 本文从现有实现反推出 Meilink 的用户需求与典型使用场景。事实基线：`Meilink/` Swift 客户端 + `Scripts/` + 根目录部署脚本。
+> 本文从现有实现反推出 Meilink 的用户需求与典型使用场景。事实基线：`client/macos-native/` Swift 客户端 + `scripts/` + 根目录部署脚本。
 
 ## 1. 目标用户
 
@@ -13,23 +13,23 @@
 ### US-1 首次配置服务器
 作为新用户，我希望在一个引导式窗口里填入 VPS 地址、端口、Token、子域名基域，并能"测试连接"验证可达，通过后保存即自动连接，不需要手编配置文件。
 
-> 对应实现：<kfile name="SetupView.swift" path="Meilink/UI/Setup/SetupView.swift">SetupView.swift</kfile>
+> 对应实现：<kfile name="SetupView.swift" path="client/macos-native/UI/Setup/SetupView.swift">SetupView.swift</kfile>
 > 触发条件：`MenuBarView.onAppear` 检测到 `!manager.isConfigured` 时自动打开 Setup 窗口。
 
 ### US-2 管理多条隧道
 作为开发者，我希望在主窗口里看到所有隧道的列表，每条隧道显示：名称、本地地址、外网访问地址、状态、启用开关，并能一键复制或打开外网地址。
 
-> 对应实现：<kfile name="MainWindow.swift" path="Meilink/UI/Main/MainWindow.swift">MainWindow.swift</kfile> + <kfile name="TunnelListRow.swift" path="Meilink/UI/Main/TunnelListRow.swift">TunnelListRow.swift</kfile>
+> 对应实现：<kfile name="MainWindow.swift" path="client/macos-native/UI/Main/MainWindow.swift">MainWindow.swift</kfile> + <kfile name="TunnelListRow.swift" path="client/macos-native/UI/Main/TunnelListRow.swift">TunnelListRow.swift</kfile>
 
 ### US-3 增删改隧道
 作为开发者，我希望添加 HTTP / HTTPS / TCP / UDP 四种类型的隧道，编辑时只改必要字段，删除时自动清理 frpc 上的代理。
 
-> 对应实现：<kfile name="TunnelEditView.swift" path="Meilink/UI/Main/TunnelEditView.swift">TunnelEditView.swift</kfile> + `TunnelManager.addTunnel/updateTunnel/deleteTunnel/toggleTunnel`
+> 对应实现：<kfile name="TunnelEditView.swift" path="client/macos-native/UI/Main/TunnelEditView.swift">TunnelEditView.swift</kfile> + `TunnelManager.addTunnel/updateTunnel/deleteTunnel/toggleTunnel`
 
 ### US-4 菜单栏快速控制
 作为 macOS 用户，我希望点菜单栏图标弹出一个小面板，看到连接状态、启用的隧道列表、一键启停、重启、打开主窗口/设置/日志、退出应用。面板外的点击要自动关闭。
 
-> 对应实现：<kfile name="AppRuntime.swift" path="Meilink/App/AppRuntime.swift">AppRuntime.swift</kfile> 的 `StatusBarController` + <kfile name="MenuBarView.swift" path="Meilink/UI/MenuBar/MenuBarView.swift">MenuBarView.swift</kfile>
+> 对应实现：<kfile name="AppRuntime.swift" path="client/macos-native/App/AppRuntime.swift">AppRuntime.swift</kfile> 的 `StatusBarController` + <kfile name="MenuBarView.swift" path="client/macos-native/UI/MenuBar/MenuBarView.swift">MenuBarView.swift</kfile>
 
 ### US-5 关窗口不退出
 作为 macOS 用户，我希望关掉主窗口后应用仍然在菜单栏运行，frpc 进程不被杀掉；只有显式点"退出"才真正退出，退出时确保 frpc 完全终止。
@@ -39,37 +39,37 @@
 ### US-6 自动重连
 作为长时间挂着的用户，我希望 frpc 异常退出或外网不可达时，应用自动检测并尝试重启 frpc + 恢复所有启用的隧道，不需要我手动干预。
 
-> 对应实现：<kfile name="TunnelManager.swift" path="Meilink/Core/TunnelManager.swift">TunnelManager.swift</kfile> 的 `pollStatus` / `recordConnectivityFailure` / `recoverConnection` + `FrpcProcess.onTermination` 回调。
+> 对应实现：<kfile name="TunnelManager.swift" path="client/macos-native/Core/TunnelManager.swift">TunnelManager.swift</kfile> 的 `pollStatus` / `recordConnectivityFailure` / `recoverConnection` + `FrpcProcess.onTermination` 回调。
 
 ### US-7 远程可达性验证
 作为用户，我希望应用定期真的去连一下外网入口（不只看 frpc 状态），发现连不上时及时报错并触发重连，避免"frpc 说 running 但外网访问不通"的假阳性。
 
-> 对应实现：<kfile name="TunnelReachabilityProbe.swift" path="Meilink/Core/TunnelReachabilityProbe.swift">TunnelReachabilityProbe.swift</kfile> + `TunnelManager.shouldProbeReachability` / `probeReachability`。
+> 对应实现：<kfile name="TunnelReachabilityProbe.swift" path="client/macos-native/Core/TunnelReachabilityProbe.swift">TunnelReachabilityProbe.swift</kfile> + `TunnelManager.shouldProbeReachability` / `probeReachability`。
 
 ### US-8 安全存储凭据
 作为用户，我希望 frps Token 存在 Keychain 而不是明文配置文件，frpc.toml 文件权限 0600，Admin API 只监听 127.0.0.1。
 
-> 对应实现：<kfile name="KeychainHelper.swift" path="Meilink/Storage/KeychainHelper.swift">KeychainHelper.swift</kfile> + <kfile name="ConfigGenerator.swift" path="Meilink/Core/ConfigGenerator.swift">ConfigGenerator.swift</kfile> 写文件后 `setAttributes posixPermissions: 0o600` + `webServer.addr = "127.0.0.1"`。
+> 对应实现：<kfile name="KeychainHelper.swift" path="client/macos-native/Storage/KeychainHelper.swift">KeychainHelper.swift</kfile> + <kfile name="ConfigGenerator.swift" path="client/macos-native/Core/ConfigGenerator.swift">ConfigGenerator.swift</kfile> 写文件后 `setAttributes posixPermissions: 0o600` + `webServer.addr = "127.0.0.1"`。
 
 ### US-9 开机自启
 作为用户，我希望勾选"开机自启动"后，登录 macOS 就自动起 Meilink 并连接。
 
-> 对应实现：<kfile name="AutoStartManager.swift" path="Meilink/Utils/AutoStartManager.swift">AutoStartManager.swift</kfile> 用 `SMAppService.mainApp` + `SettingsView` 的 Toggle + `AppSettings.launchAtLogin`。
+> 对应实现：<kfile name="AutoStartManager.swift" path="client/macos-native/Utils/AutoStartManager.swift">AutoStartManager.swift</kfile> 用 `SMAppService.mainApp` + `SettingsView` 的 Toggle + `AppSettings.launchAtLogin`。
 
 ### US-10 个性化菜单栏图标
 作为用户，我希望从 5 种图标风格（门户 / 拓扑 / 穿透 / 信号 / 中继）里选一个，菜单栏图标立即更新。
 
-> 对应实现：<kfile name="AppSettings.swift" path="Meilink/Models/AppSettings.swift">AppSettings.swift</kfile> 的 `MenuBarIconStyle` 枚举 + `SettingsView.updateMenuBarIconStyle` + `StatusBarController.menuBarImage`。
+> 对应实现：<kfile name="AppSettings.swift" path="client/macos-native/Models/AppSettings.swift">AppSettings.swift</kfile> 的 `MenuBarIconStyle` 枚举 + `SettingsView.updateMenuBarIconStyle` + `StatusBarController.menuBarImage`。
 
 ### US-11 日志可追溯
 作为运维用户，我希望在日志窗口看到连接检测、自动重连、隧道增删改、frpc stdout/stderr 的事件，支持复制、导出、清空。
 
-> 对应实现：<kfile name="LogWindowView.swift" path="Meilink/UI/Main/LogWindowView.swift">LogWindowView.swift</kfile> + `TunnelManager.events` / `addEvent` / `clearEvents`。
+> 对应实现：<kfile name="LogWindowView.swift" path="client/macos-native/UI/Main/LogWindowView.swift">LogWindowView.swift</kfile> + `TunnelManager.events` / `addEvent` / `clearEvents`。
 
 ### US-12 一键部署服务端
 作为运维用户，我希望在 VPS 上跑一个脚本或交互式程序就能部署 frps，支持多域名多 Token 隔离部署。
 
-> 对应实现：<kfile name="deploy-frps.sh" path="deploy-frps.sh">deploy-frps.sh</kfile>（单实例 systemd）+ `cross-platform-client/cmd/meilink-setup`（多 profile，见 `Scripts/build-all.sh` 第 169-195 行的构建说明）。
+> 对应实现：<kfile name="server/bare-metal/deploy-frps.sh" path="server/bare-metal/deploy-frps.sh">server/bare-metal/deploy-frps.sh</kfile>（单实例 systemd）+ `server/setup`（多 profile，见 `scripts/build/build-all.sh` 第 169-195 行的构建说明）。
 
 ## 3. 非目标（当前实现明确不做）
 
@@ -87,7 +87,7 @@
 ### 场景 A：本地 Web 开发对外回调
 开发者在本地 8080 跑了一个 Web 服务，需要让支付平台的异步回调访问到。流程：
 
-1. 部署 frps 到 VPS（`./deploy-frps.sh` 或 `meilink-setup setup`）。
+1. 部署 frps 到 VPS（`bash server/bare-metal/deploy-frps.sh` 或 `meilink-setup setup`）。
 2. DNS 加泛解析 `*.tunnel.example.com → VPS_IP`。
 3. macOS 上启动 Meilink，在 Setup 窗口填入 VPS 地址、7000、Token、`tunnel.example.com`。
 4. 添加一条 HTTP 隧道：本地 `127.0.0.1:8080`，子域名 `pay-callback`。

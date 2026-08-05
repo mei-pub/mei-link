@@ -44,7 +44,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: "1.22"
-          cache-dependency-path: cross-platform-client/go.sum
+          cache-dependency-path: client/desktop/sidecar/go.sum
 
       - name: Setup Rust (Tauri)
         uses: dtolnay/rust-toolchain@stable
@@ -58,18 +58,18 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
 
       - name: Install frontend deps
-        working-directory: cross-platform-client/desktop
+        working-directory: client/desktop
         run: npm install
 
       - name: Build Tauri desktop client
         shell: bash
-        run: bash Scripts/build-desktop.sh --copy
+        run: bash scripts/build/build-desktop.sh --copy
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:
           name: meilink-desktop-${{ matrix.label }}
-          path: release/meilink-desktop-*
+          path: release/client/desktop/meilink-desktop-*
 
   # -----------------------------------------------------------------------
   # Job 2: Swift 原生客户端（仅 macOS）
@@ -83,7 +83,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: "1.22"
-          cache-dependency-path: cross-platform-client/go.sum
+          cache-dependency-path: client/desktop/sidecar/go.sum
 
       - name: Build Swift binary via SwiftPM
         shell: bash
@@ -122,6 +122,7 @@ jobs:
             ls -la build/ 2>&1
             exit 1
           fi
+          mkdir -p release/client/macos-native
           echo "=== pre-built .app contents ==="
           find "$PREBUILT_APP" -maxdepth 3 -type f
           # Inject fresh Swift binary into the pre-built .app bundle
@@ -143,17 +144,17 @@ jobs:
           echo "=== staging contents ==="
           ls -la "$STAGE"
           hdiutil create -volname "Meilink" -srcfolder "$STAGE" \
-            -ov -fs HFS+ -format UDZO "release/meilink-${VERSION}-macOS-native.dmg"
+            -ov -fs HFS+ -format UDZO "release/client/macos-native/meilink-${VERSION}-macos-native.dmg"
           rm -rf "$STAGE"
           echo "=== final DMG ==="
-          ls -lh "release/meilink-${VERSION}-macOS-native.dmg"
+          ls -lh "release/client/macos-native/meilink-${VERSION}-macos-native.dmg"
           echo "✓ Swift native DMG built"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:
           name: meilink-swift-native
-          path: release/meilink-1.1.0-macOS-native.dmg
+          path: release/client/macos-native/meilink-1.1.0-macos-native.dmg
 
   # -----------------------------------------------------------------------
   # Job 3: 服务端 setup 工具（Linux amd64 + arm64 交叉编译，任意平台可跑）
@@ -167,21 +168,21 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: "1.22"
-          cache-dependency-path: cross-platform-client/go.sum
+          cache-dependency-path: server/setup/go.sum
 
       - name: Build setup tool
         shell: bash
         run: |
-          cd cross-platform-client
+          cd server/setup
           VERSION="1.1.0"
-          mkdir -p "$GITHUB_WORKSPACE/release"
+          mkdir -p "$GITHUB_WORKSPACE/release/server"
           for goarch in amd64 arm64; do
             outname="meilink-setup-${VERSION}-linux-${goarch}"
             stagedir="/tmp/$outname"
             rm -rf "$stagedir" && mkdir -p "$stagedir"
             CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" \
-              go build -ldflags "-s -w" -o "$stagedir/meilink-setup" ./cmd/meilink-setup
-            tar -czf "$GITHUB_WORKSPACE/release/${outname}.tar.gz" -C /tmp "$outname"
+              go build -ldflags "-s -w" -o "$stagedir/meilink-setup" .
+            tar -czf "$GITHUB_WORKSPACE/release/server/${outname}.tar.gz" -C /tmp "$outname"
             echo "✓ ${outname}.tar.gz"
           done
 
@@ -189,7 +190,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: meilink-server-setup
-          path: release/meilink-setup-*
+          path: release/server/meilink-setup-*
 
   # -----------------------------------------------------------------------
   # Job 4: 汇总所有产物到 Release
@@ -209,9 +210,19 @@ jobs:
       - name: Organize release files
         shell: bash
         run: |
-          mkdir -p release
-          find artifacts -type f -exec cp {} release/ \;
-          ls -lh release/
+          mkdir -p release/client/macos-native release/client/desktop release/server
+          # 按产物名前缀分发到对应子目录
+          find artifacts -type f | while read -r f; do
+            base="$(basename "$f")"
+            case "$base" in
+              meilink-setup-*)        cp "$f" release/server/ ;;
+              meilink-desktop-*)      cp "$f" release/client/desktop/ ;;
+              meilink-*-macos-native*) cp "$f" release/client/macos-native/ ;;
+              *)                      cp "$f" release/ ;;
+            esac
+          done
+          echo "=== release/ 结构 ==="
+          find release -type f | sort
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -219,4 +230,7 @@ jobs:
           tag_name: ${{ github.event.inputs.version || github.ref_name }}
           name: Meilink ${{ github.event.inputs.version || github.ref_name }}
           generate_release_notes: true
-          files: release/*
+          files: |
+            release/client/macos-native/*
+            release/client/desktop/*
+            release/server/*

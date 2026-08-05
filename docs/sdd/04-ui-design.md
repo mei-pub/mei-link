@@ -1,6 +1,6 @@
 # Meilink SDD · 04 · UI 设计
 
-> 本文记录 Meilink macOS 原生客户端的 UI 设计基线：窗口规格、各窗口结构、组件样式、配色、文案、图标。跨平台客户端必须与此对齐（允许细微渲染差异）。事实基线：`Meilink/UI/` 下的 SwiftUI 实现。
+> 本文记录 Meilink macOS 原生客户端的 UI 设计基线：窗口规格、各窗口结构、组件样式、配色、文案、图标。跨平台客户端必须与此对齐（允许细微渲染差异）。事实基线：`client/macos-native/UI/` 下的 SwiftUI 实现。
 
 ## 1. 窗口规格
 
@@ -15,7 +15,7 @@
 
 > **Swift vs Tauri 尺寸差异**：Swift `NSWindow` 的 `contentRect` 是内容区高度，用 `fixedSize(horizontal: false, vertical: true)` 让窗口垂直自适应内容。Tauri 窗口 `height` 是总高度（含 macOS 标题栏 28px），且需手动设成内容实际需要的高度（Swift 自适应，Tauri 不自适应）。Tauri 尺寸 = 实际内容高度 + 标题栏 28px。
 
-引用：<kfile name="AppRuntime.swift" path="Meilink/App/AppRuntime.swift">AppRuntime.swift</kfile> 的 `AppWindowController`。
+引用：<kfile name="AppRuntime.swift" path="client/macos-native/App/AppRuntime.swift">AppRuntime.swift</kfile> 的 `AppWindowController`。
 
 ## 2. 全局视觉语言
 
@@ -239,7 +239,7 @@ VStack（spacing 14, padding 14, width 330, .regularMaterial）
 - fallback：`AppIconProvider.image`（应用图标）
 
 ### 9.3 PNG 资源
-位于 `Meilink/Resources/`，每个风格对应一个 18×18 左右的 template PNG。
+位于 `client/macos-native/Resources/`，每个风格对应一个 18×18 左右的 template PNG。
 
 ## 10. 状态文案汇总
 
@@ -280,9 +280,9 @@ VStack（spacing 14, padding 14, width 330, .regularMaterial）
 ## 12. 图标资源
 
 ### 12.1 应用图标
-- `Meilink/Resources/AppIcon.icns`（1.7MB，macOS .app 用）
-- `Meilink/Resources/AppIcon.png`（1.39MB，1254×1254，构建脚本派生 Windows ICO / Linux PNG 的源）
-- `Meilink/Resources/app-icon.png`（小尺寸占位）
+- `client/macos-native/Resources/AppIcon.icns`（1.7MB，macOS .app 用）
+- `client/macos-native/Resources/AppIcon.png`（1.39MB，1254×1254，构建脚本派生 Windows ICO / Linux PNG 的源）
+- `client/macos-native/Resources/app-icon.png`（小尺寸占位）
 - `Assets.xcassets`（Xcode 集成用）
 
 ### 12.2 菜单栏 PNG
@@ -291,6 +291,6 @@ VStack（spacing 14, padding 14, width 330, .regularMaterial）
 - `globe.png` / `node.png` / `signal.png` / `bridge.png` / `pipeline.png` / `play.png` / `stop.png` / `tunnel.png`（扩展备选）
 
 ### 12.3 跨平台派生
-- `Scripts/gen-icons.sh` 从 `AppIcon.png` 派生：
-  - Windows `app.ico` → `resource_windows_amd64.syso`（go build 自动嵌入 exe）
-  - Linux `meilink.png`（256×256，供 `.desktop` 用）
+- `scripts/assets/gen-icons.sh` 从 `AppIcon.png` 派生，输出到 `client/desktop/sidecar/`：
+  - Windows `app.ico` + `resource_windows_amd64.syso`（Windows 资源对象，供桌面客户端 Windows 构建使用）
+  - Linux `meilink.png`（256×256）
