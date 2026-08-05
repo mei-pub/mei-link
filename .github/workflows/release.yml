@@ -133,33 +133,17 @@ jobs:
             cp frpc "$APP_BUNDLE/Contents/MacOS/frpc"
           fi
 
-          # 生成 Info.plist
-          cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleExecutable</key>
-  <string>Meilink</string>
-  <key>CFBundleIdentifier</key>
-  <string>pub.mei.meilink</string>
-  <key>CFBundleName</key>
-  <string>Meilink</string>
-  <key>CFBundleDisplayName</key>
-  <string>Meilink</string>
-  <key>CFBundleVersion</key>
-  <string>1.0</string>
-  <key>CFBundleShortVersionString</key>
-  <string>$VERSION</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>13.0</string>
-  <key>LSUIElement</key>
-  <true/>
-</dict>
-</plist>
-PLIST
+          # 生成 Info.plist（用 printf 避免 heredoc 在 YAML 中解析问题）
+          /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string Meilink" \
+            -c "Add :CFBundleIdentifier string pub.mei.meilink" \
+            -c "Add :CFBundleName string Meilink" \
+            -c "Add :CFBundleDisplayName string Meilink" \
+            -c "Add :CFBundleVersion string 1.0" \
+            -c "Add :CFBundleShortVersionString string $VERSION" \
+            -c "Add :CFBundlePackageType string APPL" \
+            -c "Add :LSMinimumSystemVersion string 13.0" \
+            -c "Add :LSUIElement bool true" \
+            "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
 
           # 复制 AppIcon（如果存在）
           if [ -f "client/macos-native/Resources/AppIcon.icns" ]; then

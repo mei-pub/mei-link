@@ -198,32 +198,16 @@ if [ ! -f "$NATIVE_DMG" ]; then
                 cp "$ROOT_DIR/client/macos-native/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
             fi
             # Generate Info.plist
-            cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleExecutable</key>
-  <string>Meilink</string>
-  <key>CFBundleIdentifier</key>
-  <string>pub.mei.meilink</string>
-  <key>CFBundleName</key>
-  <string>Meilink</string>
-  <key>CFBundleDisplayName</key>
-  <string>Meilink</string>
-  <key>CFBundleVersion</key>
-  <string>1.0</string>
-  <key>CFBundleShortVersionString</key>
-  <string>$VERSION</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>13.0</string>
-  <key>LSUIElement</key>
-  <true/>
-</dict>
-</plist>
-PLIST
+            /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string Meilink" \
+              -c "Add :CFBundleIdentifier string pub.mei.meilink" \
+              -c "Add :CFBundleName string Meilink" \
+              -c "Add :CFBundleDisplayName string Meilink" \
+              -c "Add :CFBundleVersion string 1.0" \
+              -c "Add :CFBundleShortVersionString string $VERSION" \
+              -c "Add :CFBundlePackageType string APPL" \
+              -c "Add :LSMinimumSystemVersion string 13.0" \
+              -c "Add :LSUIElement bool true" \
+              "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
             echo "  ✓ .app bundle built from Swift binary"
             make_dmg "$APP_BUNDLE" "$NATIVE_DMG"
             echo "  ✓ $(basename "$NATIVE_DMG") (from Swift binary)"
