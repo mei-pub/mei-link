@@ -186,12 +186,15 @@ if [ ! -f "$NATIVE_DMG" ]; then
             rm -rf "$APP_BUNDLE"
             mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
             cp "$SWIFT_BIN_DIR/Meilink" "$APP_BUNDLE/Contents/MacOS/Meilink"
-            # Download frpc if available
-            if bash "$ROOT_DIR/scripts/assets/download-frpc.sh" >/dev/null 2>&1; then
-                if [ -f frpc ]; then
-                    cp frpc "$APP_BUNDLE/Contents/MacOS/frpc" 2>/dev/null || true
-                    rm -f frpc
-                fi
+            # Download frpc into the bundle. download-frpc.sh derives its output
+            # dir from Xcode build vars (BUILT_PRODUCTS_DIR / CONTENTS_FOLDER_PATH);
+            # in the SwiftPM fallback path those aren't set, so we export them to
+            # point at the bundle we just created. Without this, OUTPUT_DIR resolves
+            # to "/MacOS" and the script fails silently (no frpc in the .app).
+            if BUILT_PRODUCTS_DIR="$APP_BUNDLE/Contents" \
+               CONTENTS_FOLDER_PATH="" \
+               bash "$ROOT_DIR/scripts/assets/download-frpc.sh" >/dev/null 2>&1; then
+                :
             fi
             # Copy icons if available
             if [ -f "$ROOT_DIR/client/macos-native/Resources/AppIcon.icns" ]; then
