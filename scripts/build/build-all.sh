@@ -13,12 +13,15 @@
 set -e
 
 VERSION="${1:-1.1.0}"
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLIENT_DIR="$ROOT_DIR/cross-platform-client"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+DESKTOP_DIR="$ROOT_DIR/client/desktop"
+SERVER_SETUP_DIR="$ROOT_DIR/server/setup"
 RELEASE_DIR="$ROOT_DIR/release"
+RELEASE_SERVER_DIR="$RELEASE_DIR/server"
+RELEASE_NATIVE_DIR="$RELEASE_DIR/client/macos-native"
 STAGE_DIR="$RELEASE_DIR/.staging"
 
-mkdir -p "$RELEASE_DIR" "$STAGE_DIR"
+mkdir -p "$RELEASE_SERVER_DIR" "$RELEASE_NATIVE_DIR" "$STAGE_DIR"
 rm -rf "${STAGE_DIR:?}"/*
 echo "=== Meilink release build v$VERSION ==="
 echo "Root:    $ROOT_DIR"
@@ -29,16 +32,16 @@ echo ""
 # 1. Tauri cross-platform desktop GUI client
 # -----------------------------------------------------------------------------
 echo ">>> Building Tauri desktop client..."
-cd "$CLIENT_DIR/desktop"
+cd "$DESKTOP_DIR"
 
 # build-desktop.sh --copy builds frontend + Go sidecar + Rust shell and copies
 # the platform-native installer (.dmg / .msi / .deb / .AppImage) to release/.
 # Run this script on each target platform (or use the GitHub Actions matrix in
 # .github/workflows/release.yml) to get all three platforms.
-if bash "$ROOT_DIR/scripts/build-desktop.sh" --copy >/dev/null 2>&1; then
+if bash "$ROOT_DIR/scripts/build/build-desktop.sh" --copy >/dev/null 2>&1; then
     echo "  ✓ Tauri app built"
 else
-    echo "  ! Tauri build failed (see scripts/build-desktop.sh output)"
+    echo "  ! Tauri build failed (see scripts/build/build-desktop.sh output)"
 fi
 echo ""
 
@@ -99,7 +102,7 @@ COMMAND_EOF
 # 2. Server setup tool (Linux only: amd64 + arm64)
 # -----------------------------------------------------------------------------
 echo ">>> Building server setup tool (Linux)..."
-cd "$CLIENT_DIR"
+cd "$SERVER_SETUP_DIR"
 build_setup() {
     local goarch="$1"
     local outname="meilink-setup-${VERSION}-linux-${goarch}"
@@ -108,7 +111,7 @@ build_setup() {
     rm -rf "$stagedir"
     mkdir -p "$stagedir"
     CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" \
-        go build -ldflags "-s -w" -o "$stagedir/meilink-setup" ./cmd/meilink-setup
+        go build -ldflags "-s -w" -o "$stagedir/meilink-setup" .
     cat > "$stagedir/README.txt" <<EOF
 Meilink frps Server Setup v${VERSION}
 
@@ -123,7 +126,7 @@ Run with sudo:
 Each profile = one domain + one token + one isolated frps systemd service
 (frps-<name>.service), auto-enabled and auto-restarted on boot.
 EOF
-    tar -czf "$RELEASE_DIR/${outname}.tar.gz" -C "$STAGE_DIR" "$outname"
+    tar -czf "$RELEASE_SERVER_DIR/${outname}.tar.gz" -C "$STAGE_DIR" "$outname"
     rm -rf "$stagedir"
     echo "    -> ${outname}.tar.gz"
 }

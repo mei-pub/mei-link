@@ -22,9 +22,9 @@
 # =============================================================================
 set -e
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CLIENT_DIR="$ROOT_DIR/cross-platform-client"
-DESKTOP_DIR="$CLIENT_DIR/desktop"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SIDECAR_DIR="$ROOT_DIR/client/desktop/sidecar"
+DESKTOP_DIR="$ROOT_DIR/client/desktop"
 COPY_TO_RELEASE=false
 
 source "$ROOT_DIR/scripts/lib/frpc-archive.sh"
@@ -49,7 +49,7 @@ echo ""
 
 # --- 1. Build Go sidecar binary ---
 echo ">>> Building Go sidecar..."
-cd "$CLIENT_DIR"
+cd "$SIDECAR_DIR"
 mkdir -p "$DESKTOP_DIR/src-tauri/binaries"
 SIDECAR_NAME="meilink-${TRIPLE}"
 [ "$GOOS" = "windows" ] && SIDECAR_NAME="${SIDECAR_NAME}.exe"
@@ -185,10 +185,11 @@ echo ""
 
 # --- 4. Copy artifacts to release/ if requested ---
 if [ "$COPY_TO_RELEASE" = true ]; then
-    echo ">>> Copying artifacts to release/..."
+    echo ">>> Copying artifacts to release/client/desktop/..."
     VERSION="1.1.0"
     BUNDLE_DIR="$DESKTOP_DIR/src-tauri/target/release/bundle"
-    mkdir -p "$ROOT_DIR/release"
+    RELEASE_DESKTOP_DIR="$ROOT_DIR/release/client/desktop"
+    mkdir -p "$RELEASE_DESKTOP_DIR"
 
     copy_bundle() {
         # $1 = bundle subdir name (dmg/msi/nsis/deb/appimage)
@@ -200,7 +201,7 @@ if [ "$COPY_TO_RELEASE" = true ]; then
             [ -f "$f" ] || continue
             local base out
             base="$(basename "$f")"
-            out="$ROOT_DIR/release/meilink-desktop-${VERSION}-${GOOS}-${GOARCH}${ext}"
+            out="$RELEASE_DESKTOP_DIR/meilink-desktop-${VERSION}-${GOOS}-${GOARCH}${ext}"
             cp "$f" "$out"
             echo "  ✓ $out"
         done
