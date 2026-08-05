@@ -186,7 +186,9 @@ echo ""
 # --- 4. Copy artifacts to release/ if requested ---
 if [ "$COPY_TO_RELEASE" = true ]; then
     echo ">>> Copying artifacts to release/client/desktop/..."
-    VERSION="1.1.0"
+    VERSION="${1:-1.1.0}"
+    # 如果第一个参数是 --copy，则从第二个参数取版本号
+    [ "$1" = "--copy" ] && VERSION="${2:-1.1.0}"
     BUNDLE_DIR="$DESKTOP_DIR/src-tauri/target/release/bundle"
     RELEASE_DESKTOP_DIR="$ROOT_DIR/release/client/desktop"
     mkdir -p "$RELEASE_DESKTOP_DIR"

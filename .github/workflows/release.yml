@@ -63,7 +63,7 @@ jobs:
 
       - name: Build Tauri desktop client
         shell: bash
-        run: bash scripts/build/build-desktop.sh --copy
+        run: bash scripts/build/build-desktop.sh --copy ${{ github.event.inputs.version || '1.1.0' }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -112,10 +112,10 @@ jobs:
 
       - name: Package Swift .app + DMG
         shell: bash
-        run: |
-          set -e
-          VERSION="1.1.0"
-          mkdir -p release/client/macos-native
+run: |
+	          set -e
+	          VERSION="${{ github.event.inputs.version || '1.1.0' }}"
+	          mkdir -p release/client/macos-native
 
           # 构建 .app bundle
           BIN_PATH="$(swift build -c release --show-bin-path)/Meilink"
@@ -189,10 +189,10 @@ jobs:
 
       - name: Build setup tool
         shell: bash
-        run: |
-          cd server/setup
-          VERSION="1.1.0"
-          mkdir -p "$GITHUB_WORKSPACE/release/server"
+run: |
+	          cd server/setup
+	          VERSION="${{ github.event.inputs.version || '1.1.0' }}"
+	          mkdir -p "$GITHUB_WORKSPACE/release/server"
           for goarch in amd64 arm64; do
             outname="meilink-setup-${VERSION}-linux-${goarch}"
             stagedir="/tmp/$outname"
