@@ -1,6 +1,5 @@
 use serde::Deserialize;
 use std::sync::Mutex;
-#[cfg(target_os = "windows")]
 use std::process::Command;
 use tauri::{
     menu::{Menu, MenuItem},
