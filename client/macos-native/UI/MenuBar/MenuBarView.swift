@@ -193,8 +193,7 @@ struct MenuBarView: View {
                 .disabled(!manager.isConfigured)
 
                 panelButton("退出", systemImage: "power") {
-                    MeilinkAppDelegate.allowQuit = true
-                    NSApplication.shared.terminate(nil)
+                    MeilinkAppDelegate.performQuit()
                 }
             }
         }

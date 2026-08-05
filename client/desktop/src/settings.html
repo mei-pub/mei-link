@@ -150,6 +150,7 @@ document.getElementById("saveBtn").onclick = async () => {
   await save(shouldRestart);
 };
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { closeWindow(); return; }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
     save(false);

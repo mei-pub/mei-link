@@ -21,6 +21,7 @@ struct SettingsView: View {
     @State private var testMessage: String?
     @State private var testSucceeded = false
     @State private var showQuitConfirmation = false
+    @State private var showRestartConfirmation = false
 
     var onClose: (() -> Void)? = nil
 
@@ -61,6 +62,20 @@ struct SettingsView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("退出后会停止当前 frpc 隧道，菜单栏入口也会消失。")
+        }
+        .confirmationDialog(
+            "保存后是否立即重启 frpc 隧道？",
+            isPresented: $showRestartConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("保存并重启") {
+                performRestartAfterSave()
+            }
+            Button("仅保存", role: .cancel) {
+                finishSave()
+            }
+        } message: {
+            Text("配置已写入。重启 frpc 让新配置立即生效；仅保存则下次启动时生效。")
         }
     }
 
@@ -212,18 +227,11 @@ struct SettingsView: View {
     private var footer: some View {
         HStack(spacing: 12) {
             Button {
-                saveConfiguration(restartAfterSave: false)
+                saveConfiguration()
             } label: {
                 Label("保存", systemImage: "checkmark")
             }
             .keyboardShortcut(.defaultAction)
-            .disabled(!canSave)
-
-            Button {
-                saveConfiguration(restartAfterSave: true)
-            } label: {
-                Label("保存并重启", systemImage: "arrow.clockwise")
-            }
             .disabled(!canSave)
 
             Spacer()
@@ -339,7 +347,7 @@ struct SettingsView: View {
         }
     }
 
-    private func saveConfiguration(restartAfterSave: Bool) {
+    private func saveConfiguration() {
         guard let port = Int(serverPort) else {
             saveError = "客户端端口必须是数字"
             return
@@ -364,21 +372,27 @@ struct SettingsView: View {
         do {
             try manager.saveConfiguration(config)
             manager.addEvent("服务器配置已保存")
-            if restartAfterSave || manager.isFrpcRunning {
-                Task {
-                    await manager.restart()
-                    isSaving = false
-                    close()
-                }
-            } else {
-                isSaving = false
-                close()
-            }
+            isSaving = false
+            // 保存成功后弹框让用户选是否重启，与跨平台端交互一致
+            showRestartConfirmation = true
         } catch {
             isSaving = false
             saveError = error.localizedDescription
             manager.addEvent("保存配置失败: \(error.localizedDescription)", level: .error)
         }
+    }
+
+    private func performRestartAfterSave() {
+        isSaving = true
+        Task {
+            await manager.restart()
+            isSaving = false
+            close()
+        }
+    }
+
+    private func finishSave() {
+        close()
     }
 
     private func close() {
@@ -390,10 +404,6 @@ struct SettingsView: View {
     }
 
     private func quitApplication() {
-        Task {
-            await manager.stop()
-            MeilinkAppDelegate.allowQuit = true
-            NSApplication.shared.terminate(nil)
-        }
+        MeilinkAppDelegate.performQuit()
     }
 }

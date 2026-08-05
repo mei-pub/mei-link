@@ -57,6 +57,7 @@ import { icons } from "./lib/icons.js";
 import { customAlert } from "./lib/dialog.js";
 
 document.getElementById("cancelBtn").onclick = () => closeWindow();
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeWindow(); });
 document.getElementById("subdomain").addEventListener("input", (e) => { document.getElementById("dnsHost").textContent = e.target.value || "tunnel.example.com"; });
 
 document.getElementById("testBtn").onclick = async () => {

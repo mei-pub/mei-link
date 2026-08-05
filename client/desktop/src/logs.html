@@ -40,9 +40,10 @@
   <div class="footer"><span id="statusMsg"></span><span class="spacer"></span><button class="btn btn-sm" id="clearBtn" style="color:var(--danger)"></button></div>
 </div>
 <script type="module">
-import { api, copyText, esc } from "./lib/api.js";
+import { api, copyText, esc, closeWindow } from "./lib/api.js";
 import { icons } from "./lib/icons.js";
 const LEVEL_LABELS = { info: "信息", warning: "警告", error: "错误" };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeWindow(); });
 document.getElementById("logIcon").innerHTML = icons.log;
 document.getElementById("copyAllBtn").innerHTML = icons.copy + " 复制全部";
 document.getElementById("exportBtn").innerHTML = icons.download + " 导出";

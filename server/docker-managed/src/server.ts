@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { EnvironmentAuth, DomainApiToken } from "./auth.ts";
 import { ServerManager, type FrpsController } from "./manager.ts";
-import type { ServerConfig } from "./config.ts";
+import { dashboardConfig, type ServerConfig } from "./config.ts";
 
 type ServerOptions = {
   dataDir?: string;
@@ -29,6 +29,22 @@ async function body(request: IncomingMessage): Promise<Record<string, unknown>> 
 async function sendFile(response: ServerResponse, path: string, contentType: string) {
   response.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
   response.end(await readFile(path));
+}
+
+/// 代理请求 frps dashboard API。dashboard 只在容器内 127.0.0.1，外部访问不到，
+/// 管理页通过本端点中转拉取 frps 的 proxy/serverinfo 数据。
+/// 用 dashboardConfig() 的凭据做 Basic Auth。失败返回 null（端点转成降级响应）。
+async function fetchFrpsDashboard(path: string): Promise<unknown | null> {
+  const dash = dashboardConfig();
+  const url = `http://${dash.addr}:${dash.port}${path}`;
+  const auth = "Basic " + Buffer.from(`${dash.user}:${dash.password}`).toString("base64");
+  try {
+    const res = await fetch(url, { headers: { authorization: auth }, signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function createManagementServer(options: ServerOptions = {}): Promise<Server> {
@@ -73,6 +89,24 @@ export async function createManagementServer(options: ServerOptions = {}): Promi
       if (url.pathname === "/api/control/restart" && request.method === "POST") { await manager.restart(); return json(response, 200, { ok: true }); }
       if (url.pathname === "/api/control/stop" && request.method === "POST") { await manager.stop(); return json(response, 200, { ok: true }); }
       if (url.pathname === "/api/events" && request.method === "GET") return json(response, 200, manager.logs());
+      // frps dashboard 代理：拉取 frps 的 serverinfo / proxies，供管理页「隧道状态」展示。
+      // dashboard 未就绪或未启用时返回降级（{error, ...}），前端友好处理。
+      if (url.pathname === "/api/frps/serverinfo" && request.method === "GET") {
+        const data = await fetchFrpsDashboard("/api/serverinfo");
+        return json(response, 200, data ?? { error: "dashboard 暂不可用", serverinfo: null });
+      }
+      if (url.pathname === "/api/frps/proxies" && request.method === "GET") {
+        // 合并四种 proxy 类型的列表
+        const types = ["tcp", "udp", "http", "https"];
+        const results = await Promise.all(types.map(async (t) => [t, await fetchFrpsDashboard(`/api/proxy/${t}`)] as const));
+        const merged: Record<string, unknown> = {};
+        let anyOk = false;
+        for (const [t, data] of results) {
+          if (data && typeof data === "object") { merged[t] = data; anyOk = true; }
+          else merged[t] = [];
+        }
+        return json(response, 200, anyOk ? { proxies: merged } : { error: "dashboard 暂不可用", proxies: {} });
+      }
       return json(response, 404, { error: "not found" });
     } catch (error) {
       return json(response, 400, { error: error instanceof Error ? error.message : "请求失败" });

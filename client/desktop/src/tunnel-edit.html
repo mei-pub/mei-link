@@ -118,6 +118,7 @@ let domains = [];          // 拉取到的域名目录
 let useDirectory = false;  // 是否走「选基域+前缀」模式
 let editingTunnel = null;  // 编辑模式下缓存的隧道对象，用于回填
 document.getElementById("cancelBtn").onclick = () => closeWindow();
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeWindow(); });
 
 function selectType(type) {
   selectedType = type;

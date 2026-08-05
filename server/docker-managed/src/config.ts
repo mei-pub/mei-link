@@ -81,7 +81,27 @@ export function renderFrpsToml(config: ServerConfig): string {
     'auth.method = "token"',
     `auth.token = ${JSON.stringify(normalized.authToken)}`,
     "",
+    "# dashboard（仅容器内 127.0.0.1，不对外暴露；管理页代理端点用它拉取代理状态）",
+    `webServer.addr = ${JSON.stringify(dashboardConfig().addr)}`,
+    `webServer.port = ${dashboardConfig().port}`,
+    `webServer.user = ${JSON.stringify(dashboardConfig().user)}`,
+    `webServer.password = ${JSON.stringify(dashboardConfig().password)}`,
+    "",
   ].join("\n");
+}
+
+/// frps 内置 dashboard 配置。固定绑 127.0.0.1（只本机访问，外部访问不到），
+/// 端口默认 7500，凭据从环境变量读（默认 admin/admin，因仅本机访问风险低）。
+/// 管理页的 /api/frps/* 代理端点用同一份凭据请求 dashboard API。
+export type DashboardConfig = { addr: string; port: number; user: string; password: string };
+
+export function dashboardConfig(env = process.env): DashboardConfig {
+  return {
+    addr: "127.0.0.1",
+    port: Number(env.MEILINK_DASHBOARD_PORT || 7500),
+    user: String(env.MEILINK_DASHBOARD_USER || "admin"),
+    password: String(env.MEILINK_DASHBOARD_PASSWORD || "admin"),
+  };
 }
 
 export function defaultServerConfig(env = process.env): ServerConfig {

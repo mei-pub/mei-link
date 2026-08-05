@@ -4,6 +4,10 @@ struct SetupView: View {
     @ObservedObject var manager: TunnelManager
     @Environment(\.dismiss) private var dismiss
 
+    /// 由 AppRuntime 注入的关闭回调。NSWindow 宿主下 @Environment(\.dismiss) 不会关窗，
+    /// 必须用 onClose 调 window.close()。为 nil 时回退到 dismiss。
+    var onClose: (() -> Void)? = nil
+
     @State private var serverAddr = ""
     @State private var serverPort = "7000"
     @State private var authToken = ""
@@ -79,7 +83,7 @@ struct SetupView: View {
 
             HStack {
                 Button("取消") {
-                    dismiss()
+                    close()
                 }
                 .keyboardShortcut(.cancelAction)
 
@@ -151,10 +155,18 @@ struct SetupView: View {
 
         do {
             try manager.saveConfiguration(config)
-            dismiss()
+            close()
             Task { await manager.start() }
         } catch {
             manager.addEvent("保存配置失败: \(error.localizedDescription)", level: .error)
+        }
+    }
+
+    private func close() {
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
         }
     }
 }

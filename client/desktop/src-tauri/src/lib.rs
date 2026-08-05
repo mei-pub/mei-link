@@ -36,6 +36,21 @@ fn stop_sidecar_tree(child: CommandChild) {
             .args(["/PID", &pid, "/T", "/F"])
             .status();
     }
+    #[cfg(unix)]
+    {
+        // sidecar 启动时 Setpgid(0,0) 成为进程组首（pid == pgid），frpc 继承同组。
+        // 先 SIGTERM 给 graceful shutdown 机会（runSidecar 收 SIGTERM 会停 frpc），
+        // 短暂等待后 SIGKILL 整组兜底。负号 pid 表示进程组。
+        let pid = child.pid().to_string();
+        let _ = Command::new("kill")
+            .args(["-TERM", &format!("-{}", pid)])
+            .status();
+        // 给 graceful 路径一点时间
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let _ = Command::new("kill")
+            .args(["-KILL", &format!("-{}", pid)])
+            .status();
+    }
     let _ = child.kill();
 }
 

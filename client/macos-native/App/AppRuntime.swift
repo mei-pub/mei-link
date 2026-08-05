@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Combine
+import ObjectiveC
 
 @MainActor
 final class AppRuntime {
@@ -338,7 +339,8 @@ final class AppWindowController {
         settingsWindow = showWindow(
             existing: settingsWindow,
             title: "设置",
-            size: NSSize(width: 760, height: 460)
+            size: NSSize(width: 760, height: 460),
+            escapable: true
         ) {
             SettingsView(manager: manager) { [weak self] in
                 self?.settingsWindow?.close()
@@ -350,9 +352,12 @@ final class AppWindowController {
         setupWindow = showWindow(
             existing: setupWindow,
             title: "首次配置",
-            size: NSSize(width: 560, height: 640)
+            size: NSSize(width: 560, height: 640),
+            escapable: true
         ) {
-            SetupView(manager: manager)
+            SetupView(manager: manager) { [weak self] in
+                self?.setupWindow?.close()
+            }
         }
     }
 
@@ -360,7 +365,8 @@ final class AppWindowController {
         tunnelWindow = showWindow(
             existing: tunnelWindow,
             title: tunnel == nil ? "添加新隧道" : "编辑隧道",
-            size: NSSize(width: 660, height: 440)
+            size: NSSize(width: 660, height: 440),
+            escapable: true
         ) {
             TunnelEditView(manager: manager, tunnel: tunnel) { [weak self] in
                 self?.tunnelWindow?.close()
@@ -382,6 +388,7 @@ final class AppWindowController {
         existing: NSWindow?,
         title: String,
         size: NSSize,
+        escapable: Bool = false,
         @ViewBuilder content: () -> Content
     ) -> NSWindow {
         if let existing, existing.isVisible {
@@ -405,7 +412,32 @@ final class AppWindowController {
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
+
+        // 给设置/首次配置/隧道编辑窗口装 ESC 关闭监听。
+        // 这些窗口是 NSWindow（非 sheet），.keyboardShortcut(.cancelAction) 不可靠，
+        // 用本地事件监听器捕获 Escape 调 window.close()。
+        if escapable {
+            installEscapeCloseMonitor(for: window)
+        }
         return window
+    }
+
+    /// 给窗口安装 ESC 键关闭监听。monitor 存在关联对象里，窗口关闭时自动移除。
+    private func installEscapeCloseMonitor(for window: NSWindow) {
+        let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak window] event in
+            // keyCode 53 = Escape；仅当目标窗口是 key window 时响应
+            if event.keyCode == 53, window?.isKeyWindow == true {
+                window?.close()
+                return nil // 吞掉事件
+            }
+            return event
+        }
+        EscapeCloseAssociation.setMonitor(monitor, for: window)
+        // 窗口关闭时移除 monitor，避免泄漏
+        let observer = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
+            EscapeCloseAssociation.removeMonitor(for: window)
+        }
+        EscapeCloseAssociation.setObserver(observer, for: window)
     }
 
     private func placeWindowOnVisibleScreen(_ window: NSWindow, size: NSSize) {
@@ -422,5 +454,31 @@ final class AppWindowController {
             y: visibleFrame.midY - height / 2
         )
         window.setFrame(NSRect(origin: origin, size: NSSize(width: width, height: height)), display: false)
+    }
+}
+
+/// 用 objc 关联对象把 ESC 监听器的 monitor token 和 willClose observer 存在 window 上，
+/// 窗口关闭时移除，避免监听器泄漏（监听器持有闭包会 retain window）。
+private enum EscapeCloseAssociation {
+    private static var monitorKey: UInt8 = 0
+    private static var observerKey: UInt8 = 0
+
+    static func setMonitor(_ monitor: Any?, for window: NSWindow) {
+        objc_setAssociatedObject(window, &monitorKey, monitor, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    static func setObserver(_ observer: NSObjectProtocol, for window: NSWindow) {
+        objc_setAssociatedObject(window, &observerKey, observer, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    static func removeMonitor(for window: NSWindow) {
+        if let monitor = objc_getAssociatedObject(window, &monitorKey) {
+            NSEvent.removeMonitor(monitor)
+            objc_setAssociatedObject(window, &monitorKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
+        if let observer = objc_getAssociatedObject(window, &observerKey) as? NSObjectProtocol {
+            NotificationCenter.default.removeObserver(observer)
+            objc_setAssociatedObject(window, &observerKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
     }
 }
