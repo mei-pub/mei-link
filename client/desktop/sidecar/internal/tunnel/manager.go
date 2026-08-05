@@ -112,7 +112,7 @@ func NewManager(cfgDir string) (*Manager, error) {
 	m.frpc.OnOutput = func(line string) {
 		m.addEvent("frpc: "+line, "info")
 	}
-	m.frpc.OnTermination = func(status int) {
+	m.frpc.OnTermination = func(status int, intentional bool) {
 		m.mu.Lock()
 		m.isFrpcRunning = false
 		m.isConnected = false
@@ -125,15 +125,19 @@ func NewManager(cfgDir string) (*Manager, error) {
 			}
 		}
 		m.mu.Unlock()
+		// 主动停止（Stop/StopImmediately/recoverConnection 内的 kill）不算崩溃：
+		// 被终止信号杀掉的进程状态码非 0，但那只是信号值，不应触发自动恢复，
+		// 否则会形成 kill→恢复→kill 死循环。与 Swift 实现对齐。
+		isCrash := !intentional && status != 0
 		level := "info"
-		if status != 0 {
+		if isCrash {
 			level = "error"
 		}
 		m.addEvent(fmt.Sprintf("frpc 进程已退出，状态码: %d", status), level)
 
-		// Auto-recover only on abnormal exit (status != 0). A normal stop
-		// (status == 0) is user-initiated via Stop()/Restart(); do not recover.
-		if status != 0 {
+		// Auto-recover only on a genuine crash (non-intentional && status != 0).
+		// An intentional stop (status carries a signal value) must not recover.
+		if isCrash {
 			go func() {
 				time.Sleep(2 * time.Second) // 防抖，与 Swift 对齐
 				m.recoverConnection(fmt.Sprintf("frpc 异常退出（状态码 %d），正在自动重启", status))

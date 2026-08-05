@@ -7,12 +7,34 @@ class FrpcProcess {
     private let logger = Logger(subsystem: "pub.mei.meilink", category: "FrpcProcess")
 
     var onOutput: ((String) -> Void)?
-    var onTermination: ((Int32) -> Void)?
+    /// frpc 进程退出回调。参数：(退出状态码, 是否由本进程主动停止触发)。
+    /// 主动停止（stop/stopImmediately）产生的退出（终止信号会被记为非 0 状态码）
+    /// 不应被上层当作崩溃来触发自动恢复。
+    var onTermination: ((Int32, Bool) -> Void)?
     /// 在 frpc 进程成功启动后回调（异步，从 terminationHandler 的反向保证）
     var onStarted: (() -> Void)?
 
+    /// 标记下一次 terminationHandler 触发是否由本进程主动停止（stop/stopImmediately）引起。
+    /// 用 NSLock 保护，因 terminationHandler 在主线程派发，而 stop 可能从后台 Task 调用。
+    private var pendingIntentionalStop = false
+    private let intentionalStopLock = NSLock()
+
     var isRunning: Bool { process?.isRunning ?? false }
     var processID: Int32? { process?.processIdentifier }
+
+    private func markIntentionalStop() {
+        intentionalStopLock.lock()
+        defer { intentionalStopLock.unlock() }
+        pendingIntentionalStop = true
+    }
+
+    private func consumeIntentionalStop() -> Bool {
+        intentionalStopLock.lock()
+        defer { intentionalStopLock.unlock() }
+        let value = pendingIntentionalStop
+        pendingIntentionalStop = false
+        return value
+    }
 
     func start(configPath: String) throws {
         stopImmediately()
@@ -20,6 +42,10 @@ class FrpcProcess {
         guard let frpcPath = findFrpcPath() else {
             throw FrpcProcessError.binaryNotFound
         }
+
+        // 新进程即将启动，清掉可能残留的旧 intentional 标志，
+        // 避免上一个进程的退出状态误传给新进程的退出回调。
+        _ = consumeIntentionalStop()
 
         process = Process()
         process?.executableURL = URL(fileURLWithPath: frpcPath)
@@ -46,8 +72,9 @@ class FrpcProcess {
 
         process?.terminationHandler = { [weak self] process in
             DispatchQueue.main.async {
-                self?.logger.info("frpc 进程已退出，状态码: \(process.terminationStatus)")
-                self?.onTermination?(process.terminationStatus)
+                let intentional = self?.consumeIntentionalStop() ?? false
+                self?.logger.info("frpc 进程已退出，状态码: \(process.terminationStatus)，主动停止: \(intentional)")
+                self?.onTermination?(process.terminationStatus, intentional)
             }
         }
 
@@ -108,6 +135,7 @@ class FrpcProcess {
     func stop() {
         guard let process = process, process.isRunning else { return }
 
+        markIntentionalStop()
         process.terminate()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
@@ -120,6 +148,8 @@ class FrpcProcess {
     func stopImmediately(timeout: TimeInterval = 2.0) {
         guard let process = process, process.isRunning else { return }
         let pid = process.processIdentifier
+
+        markIntentionalStop()
 
         outputPipe?.fileHandleForReading.readabilityHandler = nil
         errorPipe?.fileHandleForReading.readabilityHandler = nil

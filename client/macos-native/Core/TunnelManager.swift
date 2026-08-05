@@ -32,7 +32,7 @@ class TunnelManager: ObservableObject {
         frpcProcess.onOutput = { [weak self] line in
             self?.addEvent("frpc: \(line)")
         }
-        frpcProcess.onTermination = { [weak self] status in
+        frpcProcess.onTermination = { [weak self] status, intentional in
             guard let self else { return }
             self.isFrpcRunning = false
             self.isConnected = false
@@ -44,10 +44,13 @@ class TunnelManager: ObservableObject {
                     self.tunnels[idx].errorMessage = "frpc 进程已退出，状态码: \(status)"
                 }
             }
-            self.addEvent("frpc 进程已退出，状态码: \(status)", level: status == 0 ? .info : .error)
+            // 主动停止（stop/stopImmediately/recoverConnection 内的 kill）不算崩溃，
+            // 状态码非 0 只是被终止信号所携带的值，不应触发自动恢复，否则会形成 kill→恢复→kill 死循环。
+            let isCrash = !intentional && status != 0
+            self.addEvent("frpc 进程已退出，状态码: \(status)", level: isCrash ? .error : .info)
 
-            // 自动重启：如果 frpc 非正常退出，尝试自动重启
-            if status != 0 {
+            // 自动重启：仅当 frpc 真正异常退出（非主动停止且状态码非 0）时才尝试重启
+            if isCrash {
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                     await self.recoverConnection(reason: "frpc 异常退出，正在自动重启")

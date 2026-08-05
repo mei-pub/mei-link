@@ -102,15 +102,16 @@ sequenceDiagram
 - 回调：`onOutput` / `onTermination` / `onStarted`
 - frpc 二进制查找顺序：`Bundle.main.executableURL.deletingLastPathComponent()/frpc` → `Bundle.main.path(forResource: "frpc")` → 失败
 - stdout/stderr 通过 `Pipe.readabilityHandler` 异步按行回调
-- `terminationHandler` 在主线程派发 `onTermination`
+- `terminationHandler` 在主线程派发 `onTermination(status, intentional)`
+- **主动停止标记**：`stop` / `stopImmediately` 先 `markIntentionalStop()`，`terminationHandler` 派发时 `consumeIntentionalStop()` 得到 `intentional`，连同退出码一起传给上层。被终止信号杀掉的进程退出码非 0（信号值），但 `intentional=true`，不应被当作崩溃
 
 #### 跨平台 Go 实现对齐（`client/desktop/sidecar/internal/frpc/process.go`）
-Go 端 `Process` 同样提供 `OnOutput func(line string)` 与 `OnTermination func(status int)` 回调：
+Go 端 `Process` 同样提供 `OnOutput func(line string)` 与 `OnTermination func(status int, intentional bool)` 回调：
 - `Start` 用 `io.Pipe` + `bufio.Scanner` 按行扫描 stdout/stderr，trim 后非空行回调 `OnOutput`
-- 开 goroutine 调 `cmd.Wait()`，结束后调 `OnTermination(status)`（status != 0 表示异常退出）
-- `Stop` / `StopImmediately` 不再调 `cmd.Wait()`（由 Wait goroutine 拥有），只 `Kill` + 关 logFile + 置 nil
+- 开 goroutine 调 `cmd.Wait()`，结束后 `consumeIntentionalStop()` 取得 `intentional`，调 `OnTermination(status, intentional)`
+- `Stop` / `StopImmediately` 先 `markIntentionalStop()`，再 `Kill` + 关 logFile + 置 nil（不调 `cmd.Wait()`，由 Wait goroutine 拥有）
 - Windows 平台 `applyPlatformAttrs` 设置 `SysProcAttr{CreationFlags: 0x08000000}` (CREATE_NO_WINDOW) 隐藏控制台
-- `TunnelManager.NewManager` 注册回调：`OnOutput` 把每行作为 `frpc: <line>` 事件；`OnTermination` 非 0 退出时 sleep 2s 防抖后 `recoverConnection`，状态置 closed
+- `TunnelManager.NewManager` 注册回调：`OnOutput` 把每行作为 `frpc: <line>` 事件；`OnTermination` 仅在 `!intentional && status != 0`（真正崩溃）时 sleep 2s 防抖后 `recoverConnection`，状态置 closed
 
 ### 3.5 `FrpcAdminAPI`（非 MainActor）
 - baseURL = `http://127.0.0.1:<adminPort>`
@@ -221,7 +222,7 @@ flowchart TD
     Recover --> Stop --> Sleep --> StartForce --> Reset
 ```
 
-**另一条恢复路径**：frpc 进程非 0 退出时 `FrpcProcess.onTermination` 回调 → sleep 2s → `recoverConnection`。
+**另一条恢复路径**：frpc 进程真正异常退出（`!intentional && status != 0`）时 `FrpcProcess.onTermination` 回调 → sleep 2s → `recoverConnection`。主动停止（`stop` / `stopImmediately` / `recoverConnection` 内部的 kill）触发的退出 `intentional=true`，即使退出码非 0（终止信号的值）也不会触发恢复——否则会形成 kill → 恢复 → kill 死循环。
 
 恢复路径都被 `isRecovering` 标志保护，防止重入。
 

@@ -31,10 +31,19 @@ type Process struct {
 	// forward to addEvent without re-entering the process lock.
 	OnOutput func(line string)
 	// OnTermination is invoked exactly once when the frpc process exits.
-	// status is the OS exit code (0 for normal exit). It is called from a
-	// background goroutine; callers needing main-thread semantics must
-	// dispatch themselves. Mirrors Swift FrpcProcess.onTermination.
-	OnTermination func(status int)
+	// status is the OS exit code (0 for normal exit); intentional reports
+	// whether the exit was caused by our own Stop/StopImmediately. A signal
+	// kill produces a non-zero status that must NOT be treated as a crash.
+	// It is called from a background goroutine; callers needing main-thread
+	// semantics must dispatch themselves. Mirrors Swift FrpcProcess.onTermination.
+	OnTermination func(status int, intentional bool)
+
+	// pendingIntentionalStop marks the next termination as self-initiated.
+	// Set by Stop/StopImmediately, consumed by the Wait goroutine. Guarded
+	// by intentionalStopMu because Stop may run on a different goroutine
+	// than the Wait goroutine that reads it.
+	pendingIntentionalStop bool
+	intentionalStopMu     sync.Mutex
 
 	// logFile is the file handle for frpc.log (kept open for the process
 	// lifetime so stderr is also persisted on disk).
@@ -62,6 +71,24 @@ func (p *Process) PID() int {
 	return 0
 }
 
+// markIntentionalStop flags the next termination as self-initiated (Stop /
+// StopImmediately). A signal-kill produces a non-zero status that the manager
+// must NOT treat as a crash to recover from, otherwise a kill→recover→kill
+// loop forms.
+func (p *Process) markIntentionalStop() {
+	p.intentionalStopMu.Lock()
+	defer p.intentionalStopMu.Unlock()
+	p.pendingIntentionalStop = true
+}
+
+func (p *Process) consumeIntentionalStop() bool {
+	p.intentionalStopMu.Lock()
+	defer p.intentionalStopMu.Unlock()
+	v := p.pendingIntentionalStop
+	p.pendingIntentionalStop = false
+	return v
+}
+
 func (p *Process) Start(ctx context.Context, configPath string) error {
 	if p.IsRunning() {
 		return fmt.Errorf("frpc already running")
@@ -79,6 +106,10 @@ func (p *Process) Start(ctx context.Context, configPath string) error {
 	}
 	p.logFile = f
 	p.logger = log.New(f, "", log.LstdFlags)
+
+	// Clear any stale intentional flag from a previous process so the new
+	// process's termination is not misreported as self-initiated.
+	_ = p.consumeIntentionalStop()
 
 	// Capture stdout/stderr both to disk and to in-memory pipes so we can
 	// stream lines to OnOutput without losing the disk copy.
@@ -116,6 +147,7 @@ func (p *Process) Start(ctx context.Context, configPath string) error {
 		_ = stdoutW.Close()
 		_ = stderrW.Close()
 
+		intentional := p.consumeIntentionalStop()
 		status := 0
 		if err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok {
@@ -124,12 +156,12 @@ func (p *Process) Start(ctx context.Context, configPath string) error {
 				status = -1
 			}
 		}
-		p.logger.Printf("frpc exited, status=%d", status)
+		p.logger.Printf("frpc exited, status=%d, intentional=%v", status, intentional)
 		p.onOutputMu.RLock()
 		cb := p.OnTermination
 		p.onOutputMu.RUnlock()
 		if cb != nil {
-			cb(status)
+			cb(status, intentional)
 		}
 	}()
 
@@ -161,6 +193,7 @@ func (p *Process) Stop(timeout time.Duration) error {
 	if !p.IsRunning() {
 		return nil
 	}
+	p.markIntentionalStop()
 	if timeout > 0 {
 		done := make(chan struct{})
 		go func() {
@@ -186,6 +219,7 @@ func (p *Process) StopImmediately() {
 	if !p.IsRunning() {
 		return
 	}
+	p.markIntentionalStop()
 	_ = p.cmd.Process.Kill()
 	p.cmd = nil
 	p.closeLogFile()
