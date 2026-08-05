@@ -112,10 +112,10 @@ jobs:
 
       - name: Package Swift .app + DMG
         shell: bash
-run: |
-	          set -e
-	          VERSION="${{ github.event.inputs.version || '1.1.0' }}"
-	          mkdir -p release/client/macos-native
+        run: |
+          set -e
+          VERSION="${{ github.event.inputs.version || '1.1.0' }}"
+          mkdir -p release/client/macos-native
 
           # 构建 .app bundle
           BIN_PATH="$(swift build -c release --show-bin-path)/Meilink"
@@ -126,12 +126,11 @@ run: |
           # 复制二进制
           cp "$BIN_PATH" "$APP_BUNDLE/Contents/MacOS/Meilink"
 
-          # 下载 frpc
-          bash scripts/assets/download-frpc.sh
-          # frpc 下载到当前目录，移到 .app 里
-          if [ -f frpc ]; then
-            cp frpc "$APP_BUNDLE/Contents/MacOS/frpc"
-          fi
+          # 下载 frpc。download-frpc.sh 用 Xcode 构建变量决定输出目录，
+          # SwiftPM 路径下这些变量未设，会解析成 /MacOS（只读）而失败。
+          # 显式导出指向 bundle，让 frpc 直接下到 .app/Contents/MacOS/。
+          BUILT_PRODUCTS_DIR="$APP_BUNDLE/Contents" CONTENTS_FOLDER_PATH="" \
+            bash scripts/assets/download-frpc.sh
 
           # 生成 Info.plist（用 printf 避免 heredoc 在 YAML 中解析问题）
           /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string Meilink" \
@@ -171,7 +170,7 @@ run: |
         uses: actions/upload-artifact@v6
         with:
           name: meilink-swift-native
-          path: release/client/macos-native/meilink-1.1.0-macos-native.dmg
+          path: release/client/macos-native/meilink-*-macos-native.dmg
 
   # -----------------------------------------------------------------------
   # Job 3: 服务端 setup 工具（Linux amd64 + arm64 交叉编译，任意平台可跑）
@@ -189,10 +188,10 @@ run: |
 
       - name: Build setup tool
         shell: bash
-run: |
-	          cd server/setup
-	          VERSION="${{ github.event.inputs.version || '1.1.0' }}"
-	          mkdir -p "$GITHUB_WORKSPACE/release/server"
+        run: |
+          cd server/setup
+          VERSION="${{ github.event.inputs.version || '1.1.0' }}"
+          mkdir -p "$GITHUB_WORKSPACE/release/server"
           for goarch in amd64 arm64; do
             outname="meilink-setup-${VERSION}-linux-${goarch}"
             stagedir="/tmp/$outname"
