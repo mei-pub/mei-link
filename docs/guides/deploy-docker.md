@@ -187,8 +187,9 @@ docker build -t meilink-server:latest .
 
 > 每次 GitHub Release 也会推送多架构镜像到 GHCR（`ghcr.io/<owner>/meilink-server:<version>|latest`，`linux/amd64` + `linux/arm64`），并附带 OCI 离线包 `meilink-server-<ver>.oci.tar`（`docker load -i` 导入，适合 NAS 离线部署）。用预构建镜像可跳过本地 `docker build`。
 >
-> **国内加速**：镜像需在 GHCR 设为 public。可选任一方式：
-> - 加速站：`docker pull ghcr.nju.edu.cn/<owner>/meilink-server:<version>`（首次回源慢，CI 发布时已 best-effort 预热）
+> **国内加速**：可选任一方式：
+> - 阿里云 ACR（CI 配了 ACR secrets 时）：`docker pull registry.cn-hangzhou.aliyuncs.com/meilink/meilink-server:<version>`（国内直连最快）
+> - 加速站（镜像需在 GHCR 设为 public）：`docker pull ghcr.nju.edu.cn/<owner>/meilink-server:<version>`（首次回源慢，CI 发布时已 best-effort 预热）
 > - 离线导入：`docker load -i meilink-server-<ver>.oci.tar` 免网络
 >
 > 阿里云 `*.mirror.aliyuncs.com` 镜像加速器只对 Docker Hub 生效，对 ghcr.io 无加速效果。
