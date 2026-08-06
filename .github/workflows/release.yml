@@ -274,7 +274,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to Aliyun ACR (optional)
-        if: env.ALIYUN_ACR_USERNAME != ''
+        if: env.ALIYUN_ACR_USERNAME != '' && vars.ACR_REGISTRY != ''
         env:
           ALIYUN_ACR_USERNAME: ${{ secrets.ALIYUN_ACR_USERNAME }}
           ALIYUN_ACR_PASSWORD: ${{ secrets.ALIYUN_ACR_PASSWORD }}
@@ -299,7 +299,7 @@ jobs:
           v="${{ steps.ver.outputs.APP_VERSION }}"
           ghcr="ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}"
           tags="$ghcr:$v,$ghcr:latest"
-          if [ -n "${{ secrets.ALIYUN_ACR_USERNAME }}" ]; then
+          if [ -n "${{ secrets.ALIYUN_ACR_USERNAME }}" ] && [ -n "${{ vars.ACR_REGISTRY }}" ]; then
             acr="${{ vars.ACR_REGISTRY }}/${{ vars.ACR_NAMESPACE }}/${{ matrix.image }}"
             tags="$tags,$acr:$v,$acr:latest"
           fi
