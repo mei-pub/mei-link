@@ -219,7 +219,7 @@ docker compose up -d
 - runner：ubuntu-22.04，`setup-qemu` + `setup-buildx`，登录 GHCR
 - 矩阵：`client/docker` → `meilink-client`；`server/docker-managed` → `meilink-server`
 - 构建 `linux/amd64 + linux/arm64` 多架构镜像，推送 `ghcr.io/<owner>/<image>:<version>` + `:latest`
-- **可选 ACR**：若配置了 secrets `ALIYUN_ACR_USERNAME` + `ALIYUN_ACR_PASSWORD`，额外推送 `registry.cn-hangzhou.aliyuncs.com/meilink/<image>:<version>` + `:latest`（阿里云个人版免费，国内直连最快）
+- **可选 ACR**：若配置了 secrets `ALIYUN_ACR_USERNAME` + `ALIYUN_ACR_PASSWORD`，额外推送 ACR 镜像。registry 与命名空间来自 repository variables `ACR_REGISTRY`（个人版为实例专属域名，如 `crpi-<实例ID>.cn-hangzhou.personal.cr.aliyuncs.com`）与 `ACR_NAMESPACE`（个人版命名空间，通常是阿里云账号 ID）。国内直连最快（阿里云个人版免费）
 - 同时导出 OCI 离线包（`type=oci`）作为 Release 附件：`meilink-docker-client-<ver>.oci.tar` / `meilink-server-<ver>.oci.tar`
 - 需要 GHCR 权限：`permissions.packages: write`（用 `GITHUB_TOKEN`，无需额外 secrets）
 - **必须带 `org.opencontainers.image.source` label**（Dockerfile 里写死 + build-push-action `labels` 双保险）。GHCR 靠它把 package 与源仓库绑定；缺失时 package 会处于"未关联"状态，导致 GITHUB_TOKEN push 时报 `403 Forbidden`（`HEAD request ... 403`）。已在 `client/docker/Dockerfile` 与 `server/docker-managed/Dockerfile` 顶部写入 `https://github.com/tomtrije/mei-link`

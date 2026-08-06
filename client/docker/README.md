@@ -31,7 +31,7 @@ docker run -d --name meilink-client \
 
 ### 国内加速
 
-- **阿里云 ACR**（若 CI 配置了 `ALIYUN_ACR_USERNAME` / `ALIYUN_ACR_PASSWORD` secrets）：发布时会同步推送 `registry.cn-hangzhou.aliyuncs.com/meilink/meilink-client:<version>`，国内直连最快。
+- **阿里云 ACR**（若 CI 配置了 `ALIYUN_ACR_USERNAME` / `ALIYUN_ACR_PASSWORD` secrets 与 `ACR_REGISTRY` / `ACR_NAMESPACE` variables）：发布时会同步推送 `$ACR_REGISTRY/$ACR_NAMESPACE/meilink-client:<version>`，国内直连最快。
 - **GHCR 加速站**（镜像需 public）：把 `ghcr.io` 换成加速站前缀，如 `ghcr.nju.edu.cn/<owner>/meilink-client:<version>`。首次拉取加速站会回源 ghcr.io（较慢），之后缓存命中就快；发布时 CI 也会 best-effort 预热。
 - 离线导入：Release 附带的 `meilink-docker-client-<ver>.oci.tar`，`docker load -i` 免网络。
 
