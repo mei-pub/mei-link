@@ -22,6 +22,8 @@ struct SettingsView: View {
     @State private var testSucceeded = false
     @State private var showQuitConfirmation = false
     @State private var showRestartConfirmation = false
+    @State private var managementURL = ""
+    @State private var domainAPIToken = ""
 
     var onClose: (() -> Void)? = nil
 
@@ -147,6 +149,16 @@ struct SettingsView: View {
                 Text("加密 frpc 到 frps 的控制连接，不等同于 HTTPS 隧道。")
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+
+            settingsRow("管理页地址") {
+                TextField("如 http://vps:17500（可选）", text: $managementURL)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            settingsRow("管理页 Token") {
+                SecureField("客户端拉取配置用（可选）", text: $domainAPIToken)
+                    .textFieldStyle(.roundedBorder)
             }
         }
     }
@@ -283,6 +295,8 @@ struct SettingsView: View {
             subDomainHost = config.subDomainHost
             tlsEnabled = config.tlsEnabled
             adminPort = String(config.adminPort)
+            managementURL = config.managementURL
+            domainAPIToken = config.domainAPIToken
         }
         launchAtLogin = AutoStartManager.isEnabled
         menuBarIconStyle = manager.appSettings.menuBarIconStyle
@@ -363,7 +377,9 @@ struct SettingsView: View {
             authToken: authToken,
             subDomainHost: subDomainHost,
             tlsEnabled: tlsEnabled,
-            adminPort: adminPortValue
+            adminPort: adminPortValue,
+            managementURL: managementURL,
+            domainAPIToken: domainAPIToken
         )
 
         isSaving = true
