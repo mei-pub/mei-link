@@ -273,6 +273,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Login to Aliyun ACR (optional)
+        if: env.ALIYUN_ACR_USERNAME != ''
+        env:
+          ALIYUN_ACR_USERNAME: ${{ secrets.ALIYUN_ACR_USERNAME }}
+          ALIYUN_ACR_PASSWORD: ${{ secrets.ALIYUN_ACR_PASSWORD }}
+        uses: docker/login-action@v3
+        with:
+          registry: registry.cn-hangzhou.aliyuncs.com
+          username: ${{ secrets.ALIYUN_ACR_USERNAME }}
+          password: ${{ secrets.ALIYUN_ACR_PASSWORD }}
+
       - name: Resolve version
         id: ver
         shell: bash
@@ -280,6 +291,19 @@ jobs:
           v="${{ github.event.inputs.version || github.ref_name }}"
           v="${v#v}"
           echo "APP_VERSION=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        run: |
+          v="${{ steps.ver.outputs.APP_VERSION }}"
+          ghcr="ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}"
+          tags="$ghcr:$v,$ghcr:latest"
+          if [ -n "${{ secrets.ALIYUN_ACR_USERNAME }}" ]; then
+            acr="registry.cn-hangzhou.aliyuncs.com/meilink/${{ matrix.image }}"
+            tags="$tags,$acr:$v,$acr:latest"
+          fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
 
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
@@ -291,9 +315,7 @@ jobs:
           context: ${{ matrix.context }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ steps.ver.outputs.APP_VERSION }}
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
+          tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
@@ -307,6 +329,22 @@ jobs:
             --output type=oci,dest="$GITHUB_WORKSPACE/${{ matrix.dest }}/${{ matrix.oci }}-${{ steps.ver.outputs.APP_VERSION }}.oci.tar" \
             "${{ matrix.context }}"
           ls -lh "${{ matrix.dest }}/"
+
+      - name: Warm GHCR mirror caches (best-effort)
+        # 拉取公共 GHCR 镜像的常见国内加速站，触发回源缓存，国内用户后续拉取更快。
+        # 镜像需为 public，否则加速站回源 401。失败不影响发布。
+        # 矩阵只跑一次（server 实例），拉 client + server 两个镜像。
+        if: matrix.name == 'server'
+        continue-on-error: true
+        shell: bash
+        run: |
+          v="${{ steps.ver.outputs.APP_VERSION }}"
+          for mirror in ghcr.nju.edu.cn ghcr.m.daocloud.io ghcr.dockerproxy.net; do
+            for img in "${{ github.repository_owner }}/meilink-client" "${{ github.repository_owner }}/meilink-server"; do
+              echo "==> warming $mirror/$img:$v"
+              docker pull "$mirror/$img:$v" || echo "!! warm failed for $mirror/$img:$v"
+            done
+          done
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -362,3 +400,4 @@ jobs:
             release/client/desktop/*
             release/client/docker/*
             release/server/*
+            !release/**/.gitkeep

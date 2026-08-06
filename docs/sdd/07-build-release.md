@@ -219,9 +219,16 @@ docker compose up -d
 - runner：ubuntu-22.04，`setup-qemu` + `setup-buildx`，登录 GHCR
 - 矩阵：`client/docker` → `meilink-client`；`server/docker-managed` → `meilink-server`
 - 构建 `linux/amd64 + linux/arm64` 多架构镜像，推送 `ghcr.io/<owner>/<image>:<version>` + `:latest`
+- **可选**：若配置了 secrets `ALIYUN_ACR_USERNAME` + `ALIYUN_ACR_PASSWORD`，额外推送 `registry.cn-hangzhou.aliyuncs.com/meilink/<image>:<version>` + `:latest`（国内加速）
 - 同时导出 OCI 离线包（`type=oci`）作为 Release 附件：`meilink-docker-client-<ver>.oci.tar` / `meilink-server-<ver>.oci.tar`
 - 需要 GHCR 权限：`permissions.packages: write`（用 `GITHUB_TOKEN`，无需额外 secrets）
 - **必须带 `org.opencontainers.image.source` label**（Dockerfile 里写死 + build-push-action `labels` 双保险）。GHCR 靠它把 package 与源仓库绑定；缺失时 package 会处于"未关联"状态，导致 GITHUB_TOKEN push 时报 `403 Forbidden`（`HEAD request ... 403`）。已在 `client/docker/Dockerfile` 与 `server/docker-managed/Dockerfile` 顶部写入 `https://github.com/tomtrije/mei-link`
+- **国内加速**：镜像需在 GHCR 设为 public（否则加速站回源 401）。`server` 实例额外执行 best-effort 预热（`continue-on-error`），docker pull 各加速站触发回源缓存；`warm-cache.yml` 可随时手动触发
+
+### 8.6 `warm-cache.yml` — 加速站预热（手动）
+- 触发：`workflow_dispatch`，输入版本号
+- runner：ubuntu-22.04，`continue-on-error`，docker pull `ghcr.nju.edu.cn` / `ghcr.m.daocloud.io` / `ghcr.dockerproxy.net` 下的 client + server 镜像
+- 用途：不影响发布，镜像改 public 或新版本发布后，随时手动触发加速站回源缓存，国内拉取更快
 
 ### 8.5 `publish-release` — 汇总发布
 - `needs` 依赖上述 4 个 job，按产物名前缀分发到 `release/` 子目录后 `action-gh-release` 建 Release

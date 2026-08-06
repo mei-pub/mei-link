@@ -186,6 +186,10 @@ docker build -t meilink-server:latest .
 ```
 
 > 每次 GitHub Release 也会推送多架构镜像到 GHCR（`ghcr.io/<owner>/meilink-server:<version>|latest`，`linux/amd64` + `linux/arm64`），并附带 OCI 离线包 `meilink-server-<ver>.oci.tar`（`docker load -i` 导入，适合 NAS 离线部署）。用预构建镜像可跳过本地 `docker build`。
+>
+> **国内加速**：镜像需在 GHCR 设为 public。可选任一方式：
+> - 加速站：`docker pull ghcr.nju.edu.cn/<owner>/meilink-server:<version>`（首次回源慢，CI 发布时已 best-effort 预热）
+> - 阿里云 ACR（CI 配了 ACR secrets 时）：`docker pull registry.cn-hangzhou.aliyuncs.com/meilink/meilink-server:<version>`（国内直连最快）
 
 - 支持 `amd64` 与 `arm64`（构建时按宿主架构自动选 frps 二进制，其他架构会报 `Unsupported architecture` 退出）
 - 构建过程会校验 frps 压缩包的 SHA256，校验失败自动中止

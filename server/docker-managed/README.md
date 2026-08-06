@@ -30,6 +30,12 @@ docker run -d --name meilink-server --restart unless-stopped \
 
 > 仓库名以小写为准：`ghcr.io/<owner>/meilink-server:<version>|latest`。
 
+### 国内加速
+
+- **GHCR 加速站**（镜像需 public）：把 `ghcr.io` 换成加速站前缀即可，如 `ghcr.nju.edu.cn/<owner>/meilink-server:<version>`。首次拉取加速站会回源 ghcr.io（较慢），之后缓存命中就快；发布时 CI 也会 best-effort 预热。
+- **阿里云 ACR**（若 CI 配置了 `ALIYUN_ACR_USERNAME` / `ALIYUN_ACR_PASSWORD` secrets）：发布时会同步推送 `registry.cn-hangzhou.aliyuncs.com/meilink/meilink-server:<version>`，国内直连最快。
+- 离线导入：Release 附带的 `meilink-server-<ver>.oci.tar`，`docker load -i` 免网络。
+
 首次启动后浏览器打开 `http://服务器IP:17500`（若 17500 绑了 127.0.0.1，先用 SSH 端口转发：`ssh -L 17500:127.0.0.1:17500 user@vps`），使用环境变量中的账号密码登录，并在页面维护 frps 端口和域名目录。
 
 ## 网络模式：host

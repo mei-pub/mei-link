@@ -1,0 +1,42 @@
+name: Warm GHCR Mirror Cache
+
+# 手动触发：让国内 GHCR 加速站预拉取镜像（回源缓存），国内用户后续拉取更快。
+# 不依赖发布流程；可在新版本发布后、或镜像改 public 后随时手动执行。
+# 镜像需为 public，否则加速站回源 401。
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "镜像版本号（如 0.0.4）。留空则用 ./release/RELEASE_NOTES.md 或 latest 判断失败时报错"
+        required: false
+        default: ""
+
+jobs:
+  warm:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          v="${{ inputs.version }}"
+          v="${v#v}"
+          echo "APP_VERSION=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Warm GHCR mirrors
+        continue-on-error: true
+        shell: bash
+        run: |
+          v="${{ steps.ver.outputs.APP_VERSION }}"
+          for mirror in ghcr.nju.edu.cn ghcr.m.daocloud.io ghcr.dockerproxy.net; do
+            for img in "${{ github.repository_owner }}/meilink-client" "${{ github.repository_owner }}/meilink-server"; do
+              echo "==> warming $mirror/$img:$v"
+              docker pull "$mirror/$img:$v" || echo "!! warm failed for $mirror/$img:$v"
+            done
+          done
