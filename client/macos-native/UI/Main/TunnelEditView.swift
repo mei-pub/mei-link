@@ -123,6 +123,8 @@ struct TunnelEditView: View {
     /// 拉取服务端域名目录。成功则进入「选基域+前缀」模式并尝试回填；
     /// 失败则保持 fallback 手填模式。非 HTTP/HTTPS 类型跳过（用不到）。
     private func fetchDomains() {
+        // DEBUG: 确认 fetchDomains 是否被调用
+        domainFetchError = "fetchDomains 已执行，type=" + type.rawValue
         guard type == .http || type == .https else { return }
         let config = manager.serverConfig
         guard let mgmtURL = config?.managementURL, !mgmtURL.isEmpty,

@@ -203,6 +203,10 @@ if [ ! -f "$NATIVE_DMG" ]; then
                 cp "$ROOT_DIR/client/macos-native/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
             fi
             # Generate Info.plist
+            # NSAppTransportSecurity.NSAllowsArbitraryLoads=true is REQUIRED:
+            # managementURL is typically http://host:port (plain HTTP). macOS ATS
+            # blocks plain HTTP by default, which silently breaks /api/domains
+            # fetch in TunnelEditView (shows "改为手动填写" with an ATS error).
             /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string Meilink" \
               -c "Add :CFBundleIdentifier string pub.mei.meilink" \
               -c "Add :CFBundleName string Meilink" \
@@ -212,6 +216,8 @@ if [ ! -f "$NATIVE_DMG" ]; then
               -c "Add :CFBundlePackageType string APPL" \
               -c "Add :LSMinimumSystemVersion string 13.0" \
               -c "Add :LSUIElement bool true" \
+              -c "Add :NSAppTransportSecurity dict" \
+              -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" \
               "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
             echo "  ✓ .app bundle built from Swift binary"
             make_dmg "$APP_BUNDLE" "$NATIVE_DMG"

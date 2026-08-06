@@ -102,8 +102,25 @@ async function refreshTunnelStatus() {
       if (!list.length) continue;
       const rowsHtml = list.map((p) => {
         const status = p.status || "new";
-        const badge = status === "running" ? `<span class="badge running">running</span>` : `<span class="badge new">${status}</span>`;
-        const remote = p.remoteAddr || (p.customDomains && p.customDomains.join(",")) || p.subdomain || "-";
+        const badge = status === "running" || status === "online"
+          ? `<span class="badge running">${status}</span>`
+          : `<span class="badge new">${status}</span>`;
+        // frps dashboard 返回 snake_case：
+        //   TCP/UDP: 顶层 remote_addr (例如 "1.2.3.4:6000")
+        //   HTTP/HTTPS: conf.custom_domains / conf.subdomain + 服务端 subDomainHost
+        const conf = p.conf || {};
+        let remote = p.remote_addr || "";
+        if (!remote) {
+          const cds = conf.custom_domains || p.custom_domains || [];
+          if (Array.isArray(cds) && cds.length) {
+            remote = cds.join(", ");
+          } else if (conf.subdomain || p.subdomain) {
+            const sub = conf.subdomain || p.subdomain;
+            const host = (currentConfig?.domains || []).find((d) => d.kind === "subdomain")?.domain || "";
+            remote = host ? `${sub}.${host}` : `${sub}.(未配置基域)`;
+          }
+        }
+        if (!remote) remote = "-";
         return `<tr><td>${p.name || "-"}</td><td>${type}</td><td>${remote}</td><td>${badge}</td></tr>`;
       }).join("");
       sections.push(`<div class="proxy-section"><h4>${type.toUpperCase()}（${list.length}）</h4><table class="proxy-table"><thead><tr><th>名称</th><th>类型</th><th>远程地址</th><th>状态</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`);
