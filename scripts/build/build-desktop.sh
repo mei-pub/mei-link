@@ -22,6 +22,18 @@
 # =============================================================================
 set -e
 
+# shellcheck source=../lib/version.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/version.sh"
+
+# 应用版本号：优先 VERSION 环境变量 > --copy 后的位置参数 > git tag（上次发布）> 0.0.0
+# 解析逻辑见 scripts/lib/version.sh。build-desktop.sh 把版本号传给 Tauri（产物文件名）
+# 和 release/ 复制命名。--copy 模式下版本号在第二个位置参数。
+if [ "${1:-}" = "--copy" ]; then
+    APP_VERSION="$(resolve_app_version "${2:-}")"
+else
+    APP_VERSION="$(resolve_app_version "${1:-}")"
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SIDECAR_DIR="$ROOT_DIR/client/desktop/sidecar"
 DESKTOP_DIR="$ROOT_DIR/client/desktop"
@@ -127,7 +139,8 @@ if [ "$GOOS" = "darwin" ]; then
             echo "  ! ad-hoc signing verification failed (continuing anyway)"
         fi
         # Build the DMG ourselves from the signed .app.
-        SIGNED_DMG="$DESKTOP_DIR/src-tauri/target/release/bundle/dmg/Meilink_1.1.0_aarch64.dmg"
+        # 文件名用 APP_VERSION（不再写死 1.1.0），跟随 git tag 或传入的版本号。
+        SIGNED_DMG="$DESKTOP_DIR/src-tauri/target/release/bundle/dmg/Meilink_${APP_VERSION}_aarch64.dmg"
         mkdir -p "$(dirname "$SIGNED_DMG")"
         STAGE="/tmp/meilink-dmg-stage-$"
         rm -rf "$STAGE" && mkdir -p "$STAGE"
@@ -186,9 +199,7 @@ echo ""
 # --- 4. Copy artifacts to release/ if requested ---
 if [ "$COPY_TO_RELEASE" = true ]; then
     echo ">>> Copying artifacts to release/client/desktop/..."
-    VERSION="${1:-1.1.0}"
-    # 如果第一个参数是 --copy，则从第二个参数取版本号
-    [ "$1" = "--copy" ] && VERSION="${2:-1.1.0}"
+    # APP_VERSION 已在脚本开头解析（环境变量 > 位置参数 > git tag）
     BUNDLE_DIR="$DESKTOP_DIR/src-tauri/target/release/bundle"
     RELEASE_DESKTOP_DIR="$ROOT_DIR/release/client/desktop"
     mkdir -p "$RELEASE_DESKTOP_DIR"
@@ -203,7 +214,7 @@ if [ "$COPY_TO_RELEASE" = true ]; then
             [ -f "$f" ] || continue
             local base out
             base="$(basename "$f")"
-            out="$RELEASE_DESKTOP_DIR/meilink-desktop-${VERSION}-${GOOS}-${GOARCH}${ext}"
+            out="$RELEASE_DESKTOP_DIR/meilink-desktop-${APP_VERSION}-${GOOS}-${GOARCH}${ext}"
             cp "$f" "$out"
             echo "  ✓ $out"
         done

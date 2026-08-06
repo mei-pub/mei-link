@@ -12,7 +12,9 @@
 # =============================================================================
 set -e
 
-VERSION="${1:-1.1.0}"
+# shellcheck source=../lib/version.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/version.sh"
+VERSION="$(resolve_app_version "$1")"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DESKTOP_DIR="$ROOT_DIR/client/desktop"
 SERVER_SETUP_DIR="$ROOT_DIR/server/setup"
@@ -38,7 +40,7 @@ cd "$DESKTOP_DIR"
 # the platform-native installer (.dmg / .msi / .deb / .AppImage) to release/.
 # Run this script on each target platform (or use the GitHub Actions matrix in
 # .github/workflows/release.yml) to get all three platforms.
-if bash "$ROOT_DIR/scripts/build/build-desktop.sh" --copy >/dev/null 2>&1; then
+if bash "$ROOT_DIR/scripts/build/build-desktop.sh" --copy "$VERSION" >/dev/null 2>&1; then
     echo "  ✓ Tauri app built"
 else
     echo "  ! Tauri build failed (see scripts/build/build-desktop.sh output)"

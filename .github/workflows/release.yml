@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "版本号（如 1.1.0）"
-        required: true
-        default: "1.1.0"
+        description: "版本号（如 1.2.0）。留空则用最近 git tag 或输入新版本号"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -61,9 +61,17 @@ jobs:
         working-directory: client/desktop
         run: npm install
 
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          v="${{ github.event.inputs.version || github.ref_name }}"
+          v="${v#v}"
+          echo "APP_VERSION=$v" >> "$GITHUB_OUTPUT"
+
       - name: Build Tauri desktop client
         shell: bash
-        run: bash scripts/build/build-desktop.sh --copy ${{ github.event.inputs.version || '1.1.0' }}
+        run: bash scripts/build/build-desktop.sh --copy "${{ steps.ver.outputs.APP_VERSION }}"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -84,6 +92,14 @@ jobs:
         with:
           go-version: "1.22"
           cache-dependency-path: client/desktop/sidecar/go.sum
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          v="${{ github.event.inputs.version || github.ref_name }}"
+          v="${v#v}"
+          echo "APP_VERSION=$v" >> "$GITHUB_OUTPUT"
 
       - name: Build Swift binary via SwiftPM
         shell: bash
@@ -114,7 +130,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          VERSION="${{ github.event.inputs.version || '1.1.0' }}"
+          VERSION="${{ steps.ver.outputs.APP_VERSION }}"
           mkdir -p release/client/macos-native
 
           # 构建 .app bundle
@@ -186,11 +202,19 @@ jobs:
           go-version: "1.22"
           cache-dependency-path: server/setup/go.sum
 
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          v="${{ github.event.inputs.version || github.ref_name }}"
+          v="${v#v}"
+          echo "APP_VERSION=$v" >> "$GITHUB_OUTPUT"
+
       - name: Build setup tool
         shell: bash
         run: |
           cd server/setup
-          VERSION="${{ github.event.inputs.version || '1.1.0' }}"
+          VERSION="${{ steps.ver.outputs.APP_VERSION }}"
           mkdir -p "$GITHUB_WORKSPACE/release/server"
           for goarch in amd64 arm64; do
             outname="meilink-setup-${VERSION}-linux-${goarch}"
