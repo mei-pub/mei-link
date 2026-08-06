@@ -240,7 +240,13 @@ async function initializeEditContext() {
     if (res && res.domains && res.domains.length) { domains = res.domains; }
     else if (res && res.error) { document.getElementById("fallbackNotice").textContent = res.error + "，改为手动填写"; }
   } catch(e) { /* 拉取失败静默走 fallback */ }
-  if (editingTunnel) { selectType(editingTunnel.type || editingTunnel.Type || "http"); }
+  if (editingTunnel) {
+    selectType(editingTunnel.type || editingTunnel.Type || "http");
+  } else {
+    // 新建隧道：拉取是异步的，selectType 已经在加载时跑过一次（当时 domains 还空）。
+    // 现在拉到了，必须重新渲染域名区块，否则会一直停在 fallback 手填界面。
+    renderDomainSection();
+  }
   autoFitWindow();
 }
 void initializeEditContext();
