@@ -224,20 +224,26 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-
-            settingsRow("退出程序") {
-                Button(role: .destructive) {
-                    showQuitConfirmation = true
-                } label: {
-                    Label("完全退出 Meilink", systemImage: "power")
-                }
-                .buttonStyle(.bordered)
-            }
         }
     }
 
     private var footer: some View {
         HStack(spacing: 12) {
+            // 左下角：退出（与跨平台端对齐）
+            Button(role: .destructive) {
+                showQuitConfirmation = true
+            } label: {
+                Label("退出", systemImage: "power")
+            }
+            .buttonStyle(.bordered)
+
+            Spacer()
+
+            Button("关闭") {
+                close()
+            }
+            .keyboardShortcut(.cancelAction)
+
             Button {
                 saveConfiguration()
             } label: {
