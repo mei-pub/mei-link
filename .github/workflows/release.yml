@@ -283,6 +283,10 @@ jobs:
 
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
+        env:
+          # 禁用 build record 自动上传：*.dockerbuild 产物只含构建元数据，
+          # 对发布无价值，且会让 download-artifact 全量下载时失败
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
         with:
           context: ${{ matrix.context }}
           platforms: linux/amd64,linux/arm64
@@ -322,6 +326,9 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: artifacts
+          # 排除 build-push-action 自动上传的 *.dockerbuild 构建记录产物
+          # （无该过滤时默认下载全部产物，dockerbuild 元数据会导致下载/解压失败）
+          pattern: "!*.dockerbuild"
 
       - name: Organize release files
         shell: bash

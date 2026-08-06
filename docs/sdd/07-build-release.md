@@ -224,6 +224,7 @@ docker compose up -d
 
 ### 8.5 `publish-release` — 汇总发布
 - `needs` 依赖上述 4 个 job，按产物名前缀分发到 `release/` 子目录后 `action-gh-release` 建 Release
+- `download-artifact` 用 `pattern: "!*.dockerbuild"` 排除 build-push-action 自动上传的构建记录产物（否则全量下载会因 dockerbuild 元数据解压失败）；`docker-images` 侧同时设 `DOCKER_BUILD_RECORD_UPLOAD=false` 直接禁止上传
 
 ## 9. 发布检查清单
 
