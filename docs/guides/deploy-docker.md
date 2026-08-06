@@ -189,7 +189,9 @@ docker build -t meilink-server:latest .
 >
 > **国内加速**：镜像需在 GHCR 设为 public。可选任一方式：
 > - 加速站：`docker pull ghcr.nju.edu.cn/<owner>/meilink-server:<version>`（首次回源慢，CI 发布时已 best-effort 预热）
-> - 阿里云 ACR（CI 配了 ACR secrets 时）：`docker pull registry.cn-hangzhou.aliyuncs.com/meilink/meilink-server:<version>`（国内直连最快）
+> - 离线导入：`docker load -i meilink-server-<ver>.oci.tar` 免网络
+>
+> 阿里云 `*.mirror.aliyuncs.com` 镜像加速器只对 Docker Hub 生效，对 ghcr.io 无加速效果。
 
 - 支持 `amd64` 与 `arm64`（构建时按宿主架构自动选 frps 二进制，其他架构会报 `Unsupported architecture` 退出）
 - 构建过程会校验 frps 压缩包的 SHA256，校验失败自动中止

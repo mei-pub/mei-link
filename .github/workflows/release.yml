@@ -273,17 +273,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to Aliyun ACR (optional)
-        if: env.ALIYUN_ACR_USERNAME != ''
-        env:
-          ALIYUN_ACR_USERNAME: ${{ secrets.ALIYUN_ACR_USERNAME }}
-          ALIYUN_ACR_PASSWORD: ${{ secrets.ALIYUN_ACR_PASSWORD }}
-        uses: docker/login-action@v3
-        with:
-          registry: registry.cn-hangzhou.aliyuncs.com
-          username: ${{ secrets.ALIYUN_ACR_USERNAME }}
-          password: ${{ secrets.ALIYUN_ACR_PASSWORD }}
-
       - name: Resolve version
         id: ver
         shell: bash
@@ -291,19 +280,6 @@ jobs:
           v="${{ github.event.inputs.version || github.ref_name }}"
           v="${v#v}"
           echo "APP_VERSION=$v" >> "$GITHUB_OUTPUT"
-
-      - name: Compute image tags
-        id: tags
-        shell: bash
-        run: |
-          v="${{ steps.ver.outputs.APP_VERSION }}"
-          ghcr="ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}"
-          tags="$ghcr:$v,$ghcr:latest"
-          if [ -n "${{ secrets.ALIYUN_ACR_USERNAME }}" ]; then
-            acr="registry.cn-hangzhou.aliyuncs.com/meilink/${{ matrix.image }}"
-            tags="$tags,$acr:$v,$acr:latest"
-          fi
-          echo "tags=$tags" >> "$GITHUB_OUTPUT"
 
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
@@ -315,7 +291,9 @@ jobs:
           context: ${{ matrix.context }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ steps.ver.outputs.APP_VERSION }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
@@ -386,6 +364,10 @@ jobs:
               *)                        cp "$f" release/ ;;
             esac
           done
+          # 剔除 0 字节文件（如 .gitkeep 占位文件）：GitHub Release API 拒绝
+          # 上传空文件（size must be >= 1）。一次性清掉所有空文件，不逐个排除。
+          find release -type f -size 0 -delete
+
           echo "=== release/ 结构 ==="
           find release -type f | sort
 
@@ -400,4 +382,3 @@ jobs:
             release/client/desktop/*
             release/client/docker/*
             release/server/*
-            !release/**/.gitkeep
