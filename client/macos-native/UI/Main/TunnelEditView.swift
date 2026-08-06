@@ -127,7 +127,7 @@ struct TunnelEditView: View {
         let config = manager.serverConfig
         guard let mgmtURL = config?.managementURL, !mgmtURL.isEmpty,
               let token = config?.domainAPIToken, !token.isEmpty else {
-            // 未配置管理页，走 fallback，不报错
+            domainFetchError = "未配置管理页地址或 token (config: " + (config == nil ? "nil" : "有值") + ", mgmtURL: " + (config?.managementURL ?? "nil") + ", token: " + (config?.domainAPIToken ?? "nil") + ")"
             return
         }
         isFetchingDomains = true
