@@ -43,7 +43,7 @@ function updatePortNotice() {
     .filter((name) => Number(form[name].value) > 0 && Number(form[name].value) < 1024);
   if (!low.length) { notice.textContent = ""; return; }
   notice.style.color = "#b07b00";
-  notice.textContent = `端口 ${low.join("、")} < 1024 为特权端口，依赖镜像内置的 CAP_NET_BIND_SERVICE（已构建版本自动满足）；bridge 模式下还需在 compose 映射对应端口。`;
+  notice.textContent = `端口 ${low.join("、")} < 1024 为特权端口，依赖镜像内置的 CAP_NET_BIND_SERVICE（已构建版本自动满足），host 网络模式下保存即生效。`;
 }
 
 // 读取当前完整 config（系统设置 + 域名共用一份 server config）
