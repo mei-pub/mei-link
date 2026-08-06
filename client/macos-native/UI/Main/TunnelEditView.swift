@@ -2,7 +2,7 @@ import SwiftUI
 
 struct TunnelEditView: View {
     @ObservedObject var manager: TunnelManager
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismiss) private var dismiss: DismissAction
 
     var tunnel: Tunnel?
     var onClose: (() -> Void)? = nil
@@ -23,6 +23,8 @@ struct TunnelEditView: View {
     @State private var domainPrefix = ""
     @State private var domainFetchError: String? = nil
     @State private var isFetchingDomains = false
+    /// 调试用：拉取成功时显示域名列表摘要
+    @State private var domainFetchInfo: String? = nil
 
     /// 拉取成功且选了基域时为 true，走「选基域+前缀」交互；否则 fallback 到手填。
     private var useDomainDirectory: Bool { !domains.isEmpty && selectedDomainID != nil }
@@ -136,6 +138,7 @@ struct TunnelEditView: View {
                     domains = fetched
                     isFetchingDomains = false
                     domainFetchError = nil
+                    domainFetchInfo = "已拉取域名列表: " + fetched.map(\.domain).joined(separator: ", ")
                     prefillDomainSelection()
                 }
             } catch {
@@ -183,6 +186,33 @@ struct TunnelEditView: View {
     /// 否则 fallback 到手填（子域名 + 自定义域名）。
     private var domainSection: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // 域名拉取状态（调试用，任何时候都可见）
+            if let info = domainFetchInfo {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.caption)
+                    Text(info)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .frame(height: 32)
+                .overlay(alignment: .bottom) { Divider().padding(.leading, 108).opacity(0.7) }
+            }
+            if let error = domainFetchError {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                        .font(.caption)
+                    Text("\(error)，改为手动填写")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .frame(height: 40)
+                .overlay(alignment: .bottom) { Divider().padding(.leading, 108).opacity(0.7) }
+            }
             if useDomainDirectory {
                 formRow("基域") {
                     Picker("基域", selection: $selectedDomainID) {
@@ -207,19 +237,6 @@ struct TunnelEditView: View {
                     .overlay(alignment: .bottom) { Divider().padding(.leading, 108).opacity(0.7) }
                 }
             } else {
-                if let error = domainFetchError {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                            .font(.caption)
-                        Text("\(error)，改为手动填写")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                    }
-                    .frame(height: 40)
-                    .overlay(alignment: .bottom) { Divider().padding(.leading, 108).opacity(0.7) }
-                }
                 formRow("子域名") {
                     TextField("例如 admin（依赖服务端主域名）", text: $subdomain)
                         .textFieldStyle(.roundedBorder)

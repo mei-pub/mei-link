@@ -32,6 +32,21 @@ async function sendFile(response: ServerResponse, webDir: string, file: string, 
   response.end(await readFile(join(webDir, file)));
 }
 
+/** 代理请求服务端管理页。失败返回 {error}，成功透传管理页 JSON。 */
+async function fetchManagement(managementURL: string | undefined, token: string | undefined, path: string): Promise<Record<string, unknown>> {
+  if (!managementURL || !token) return { domains: [], error: "未配置管理页地址或 token" };
+  const base = managementURL.replace(/\/+$/, "");
+  try {
+    const res = await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) });
+    if (res.status === 404) return { domains: [], error: "服务端未启用域名接口" };
+    if (res.status === 401) return { domains: [], error: "域名拉取 token 错误" };
+    if (!res.ok) return { domains: [], error: `管理页返回 HTTP ${res.status}` };
+    return await res.json() as Record<string, unknown>;
+  } catch (e) {
+    return { domains: [], error: `无法连接管理页: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
 export async function createMeilinkServer(options: MeilinkServerOptions = {}): Promise<Server> {
   const dataDir = options.dataDir || process.env.MEILINK_DATA_DIR || "/data";
   const webDir = options.webDir || join(import.meta.dirname, "../web");
@@ -104,6 +119,18 @@ export async function createMeilinkServer(options: MeilinkServerOptions = {}): P
       if (url.pathname === "/api/server-config" && request.method === "POST") {
         await manager.saveConfig(await body(request) as never);
         return json(response, 201, { ok: true });
+      }
+      // 代理到服务端管理页拉取域名目录 / 启动信息，简化隧道编辑（选基域+填前缀）。
+      // 失败返回 {domains:[], error} 让前端 fallback 到手填。
+      if (url.pathname === "/api/domains" && request.method === "GET") {
+        const cfg = manager.serverConfig();
+        const result = await fetchManagement(cfg.managementURL, cfg.domainAPIToken, "/api/domains");
+        return json(response, 200, result);
+      }
+      if (url.pathname === "/api/bootstrap" && request.method === "GET") {
+        const cfg = manager.serverConfig();
+        const result = await fetchManagement(cfg.managementURL, cfg.domainAPIToken, "/api/bootstrap");
+        return json(response, 200, result);
       }
       if (url.pathname === "/api/control/start" && request.method === "POST") {
         await manager.start();

@@ -9,6 +9,10 @@ export interface ServerConfig {
   adminPassword: string;
   vhostHTTPPort: number;
   vhostHTTPSPort: number;
+  /** 服务端管理页地址（如 http://vps:17500），用于拉取域名目录，简化隧道编辑。留空则走手填。 */
+  managementURL?: string;
+  /** 拉取 /api/domains 用的 Bearer token（对应服务端 MEILINK_DOMAIN_API_TOKEN）。 */
+  domainAPIToken?: string;
 }
 
 export function generateFrpcToml(config: ServerConfig, dataDir: string): string {

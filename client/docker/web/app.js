@@ -102,12 +102,79 @@ function formForTunnel(tunnel = {}) {
   const enabled = tunnel.enabled !== false; field(form, "enabled").checked = enabled; setSwitch(form.querySelector('[data-switch="enabled"]'), enabled); typeFields();
 }
 function typeFields() { const webTunnel = ["http", "https"].includes(formValue($("#tunnelForm"), "type")); $("#webTunnelFields").classList.toggle("hidden", !webTunnel); $("#portTunnelFields").classList.toggle("hidden", webTunnel); }
-function openTunnelDialog(tunnel) { formForTunnel(tunnel); $("#tunnelDialogTitle").textContent = tunnel ? "编辑隧道" : "添加隧道"; $("#tunnelDialog").showModal(); field($("#tunnelForm"), "name").focus(); }
+function openTunnelDialog(tunnel) { formForTunnel(tunnel); $("#tunnelDialogTitle").textContent = tunnel ? "编辑隧道" : "添加隧道"; $("#tunnelDialog").showModal(); field($("#tunnelForm"), "name").focus(); loadDomainDirectory(tunnel); }
 function closeTunnelDialog() { $("#tunnelDialog").close(); }
-function tunnelPayload(form) { return { name: formValue(form, "name"), type: formValue(form, "type"), localIP: formValue(form, "localIP"), localPort: Number(formValue(form, "localPort")), subdomain: formValue(form, "subdomain"), remotePort: Number(formValue(form, "remotePort")) || undefined, customDomains: formValue(form, "customDomains").split(",").map(domain => domain.trim()).filter(Boolean), httpUser: formValue(form, "httpUser"), httpPassword: formValue(form, "httpPassword"), hostHeaderRewrite: formValue(form, "hostHeaderRewrite"), enabled: field(form, "enabled").checked }; }
+
+// 域名目录拉取（选基域+填前缀模式）。与原生端/Tauri 端逻辑一致。
+let domainEntries = [];
+let useDirectory = false;
+let editingTunnelForDomain = null;
+
+async function loadDomainDirectory(tunnel) {
+  editingTunnelForDomain = tunnel || null;
+  domainEntries = []; useDirectory = false;
+  $("#directoryGroup").classList.add("hidden");
+  $("#manualDomainFields").classList.remove("hidden");
+  $("#fallbackNotice").classList.add("hidden");
+  const isHttp = ["http", "https"].includes(tunnel?.type || "http");
+  if (!isHttp) return;
+  try {
+    const res = await api("/api/domains");
+    if (res.domains && res.domains.length) {
+      domainEntries = res.domains;
+      renderDomainSection();
+    } else if (res.error) {
+      $("#fallbackNotice").textContent = res.error + "，改为手动填写";
+      $("#fallbackNotice").classList.remove("hidden");
+    }
+  } catch (e) { /* 静默 fallback */ }
+}
+
+function renderDomainSection() {
+  if (!domainEntries.length) { useDirectory = false; return; }
+  useDirectory = true;
+  $("#directoryGroup").classList.remove("hidden");
+  $("#manualDomainFields").classList.add("hidden");
+  const sel = $("#baseDomain");
+  sel.innerHTML = domainEntries.map(d => `<option value="${d.domain}">${d.domain}（${d.kind === "wildcard" ? "泛域名" : "主域名"}）</option>`).join("");
+  // 编辑已有隧道时回填
+  if (editingTunnelForDomain) {
+    const sub = editingTunnelForDomain.subdomain;
+    const customs = editingTunnelForDomain.customDomains || [];
+    if (sub) { const p = domainEntries.find(d => d.kind !== "wildcard"); if (p) { sel.value = p.domain; $("#domainPrefix").value = sub; } }
+    else if (customs.length) { const host = customs[0]; for (const d of domainEntries) { if (d.kind === "wildcard") { const h = d.domain.slice(2); if (host.endsWith("." + h)) { sel.value = d.domain; $("#domainPrefix").value = host.slice(0, -(h.length + 1)); break; } } } }
+  }
+  updateDomainPreview();
+  sel.onchange = updateDomainPreview;
+  $("#domainPrefix").oninput = updateDomainPreview;
+}
+
+function updateDomainPreview() {
+  const sel = $("#baseDomain"); const domain = sel.value; const prefix = $("#domainPrefix").value.trim();
+  const host = domain.startsWith("*.") ? domain.slice(2) : domain;
+  const full = prefix ? `${prefix}.${host}` : host;
+  const type = formValue($("#tunnelForm"), "type");
+  $("#domainPreview").textContent = `访问地址：${type === "https" ? "https" : "http"}://${full}`;
+}
+
+function tunnelPayload(form) {
+  const type = formValue(form, "type");
+  let subdomain = formValue(form, "subdomain");
+  let customDomains = formValue(form, "customDomains").split(",").map(d => d.trim()).filter(Boolean);
+  // directory 模式：按所选基域类型算出 subdomain 或 customDomains
+  if (useDirectory && ["http", "https"].includes(type)) {
+    const sel = $("#baseDomain"); const entry = domainEntries.find(d => d.domain === sel.value);
+    const prefix = $("#domainPrefix").value.trim();
+    if (entry) {
+      if (entry.kind === "wildcard") { subdomain = ""; customDomains = [prefix ? `${prefix}.${entry.domain.slice(2)}` : entry.domain.slice(2)]; }
+      else { subdomain = prefix; customDomains = []; }
+    }
+  }
+  return { name: formValue(form, "name"), type, localIP: formValue(form, "localIP"), localPort: Number(formValue(form, "localPort")), subdomain, remotePort: Number(formValue(form, "remotePort")) || undefined, customDomains, httpUser: formValue(form, "httpUser"), httpPassword: formValue(form, "httpPassword"), hostHeaderRewrite: formValue(form, "hostHeaderRewrite"), enabled: field(form, "enabled").checked };
+}
 async function saveConfig(connectAfterSave = false) {
   const form = $("#configForm");
-  await api("/api/server-config", { method: "POST", body: JSON.stringify({ serverAddr: formValue(form, "serverAddr"), serverPort: Number(formValue(form, "serverPort")), authToken: formValue(form, "authToken"), subDomainHost: formValue(form, "subDomainHost"), tlsEnabled: field(form, "tlsEnabled").checked, adminPort: Number(formValue(form, "adminPort")), adminUser: formValue(form, "adminUser"), adminPassword: formValue(form, "adminPassword"), vhostHTTPPort: Number(formValue(form, "vhostHTTPPort")), vhostHTTPSPort: Number(formValue(form, "vhostHTTPSPort")) }) });
+  await api("/api/server-config", { method: "POST", body: JSON.stringify({ serverAddr: formValue(form, "serverAddr"), serverPort: Number(formValue(form, "serverPort")), authToken: formValue(form, "authToken"), subDomainHost: formValue(form, "subDomainHost"), tlsEnabled: field(form, "tlsEnabled").checked, adminPort: Number(formValue(form, "adminPort")), adminUser: formValue(form, "adminUser"), adminPassword: formValue(form, "adminPassword"), vhostHTTPPort: Number(formValue(form, "vhostHTTPPort")), vhostHTTPSPort: Number(formValue(form, "vhostHTTPSPort")), managementURL: formValue(form, "managementURL"), domainAPIToken: formValue(form, "domainAPIToken") }) });
   field(form, "authToken").value = ""; field(form, "adminPassword").value = "";
   if (connectAfterSave) await api("/api/control/start", { method: "POST" });
   notify(connectAfterSave ? "设置已保存，正在连接" : "服务器设置已保存"); await load();
