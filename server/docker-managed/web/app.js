@@ -14,6 +14,21 @@ async function request(path, options = {}) {
   return payload;
 }
 
+// 启动时探测登录态：cookie 还在就直接进 app，不再强制重新登录。
+// 后端 session 默认 24h（auth.ts），所以正常刷新/重开页面都能保持登录。
+async function bootstrap() {
+  try {
+    await request("/api/status");
+    loginView.classList.add("hidden");
+    appView.classList.remove("hidden");
+    await refresh();
+  } catch {
+    // 401 = 未登录或 session 过期，留在登录页
+    loginView.classList.remove("hidden");
+    appView.classList.add("hidden");
+  }
+}
+
 function addDomain(domain = "", kind = "custom", enabled = true) {
   const row = document.createElement("div");
   row.className = "domain-row";
@@ -116,8 +131,10 @@ async function refreshTunnelStatus() {
             remote = cds.join(", ");
           } else if (conf.subdomain || p.subdomain) {
             const sub = conf.subdomain || p.subdomain;
-            const host = (currentConfig?.domains || []).find((d) => d.kind === "subdomain")?.domain || "";
-            remote = host ? `${sub}.${host}` : `${sub}.(未配置基域)`;
+            // 主域名 kind 是 "primary"（server.ts 里 find d.kind === "primary"），
+            // 这里取主域名作为子域名基域，拼成完整可访问地址。
+            const host = (currentConfig?.domains || []).find((d) => d.kind === "primary" && d.enabled)?.domain || "";
+            remote = host ? `${sub}.${host}` : `${sub}.(未配置主域名)`;
           }
         }
         if (!remote) remote = "-";
@@ -155,3 +172,6 @@ document.querySelector("#saveDomainsBtn").onclick = async (event) => { event.pre
 document.querySelector("#restartFrps").onclick = async () => { await request("/api/control/restart", { method: "POST" }); await refresh(); };
 document.querySelector("#refresh").onclick = refresh;
 document.querySelector("#logout").onclick = async () => { await request("/api/logout", { method: "POST" }); location.reload(); };
+
+// 启动：探测登录态，已登录就直接进 app
+bootstrap();
