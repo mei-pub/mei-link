@@ -392,6 +392,8 @@ final class AppWindowController {
         @ViewBuilder content: () -> Content
     ) -> NSWindow {
         if let existing, existing.isVisible {
+            // 窗口已存在时，重新设置 contentView 触发 onAppear（否则第二次打开不拉取域名）
+            existing.contentViewController = NSHostingController(rootView: content())
             existing.makeKeyAndOrderFront(nil)
             existing.orderFrontRegardless()
             NSApp.activate(ignoringOtherApps: true)
