@@ -47,8 +47,11 @@ enum DomainDirectory {
     }
 
     private static func normalizeBase(_ managementURL: String) -> String {
-        managementURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "/", with: "")
+        // 只去掉结尾的斜杠，保留 http:// 里的斜杠。
+        // 注意：不能用 replacingOccurrences(of:"/")，那会删掉 http:// 的斜杠彻底破坏 URL。
+        var base = managementURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        while base.hasSuffix("/") { base.removeLast() }
+        return base
     }
 
     private static func fetchAndDecode<T: Decodable>(_ type: T.Type, url: URL, token: String) async throws -> T {
