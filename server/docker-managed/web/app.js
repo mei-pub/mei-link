@@ -75,13 +75,13 @@ async function refreshTunnelStatus() {
   try {
     const si = await request("/api/frps/serverinfo");
     const grid = document.querySelector("#serverInfoGrid");
-    if (si.error || !si.serverinfo) {
+    // 成功时顶层即 dashboard 数据（version/bindPort/...），失败时 {error, serverinfo: null}
+    if (si.error || !si.version) {
       grid.innerHTML = `<div class="info-item"><span>仪表盘</span><span style="color:#bd3b48">${si.error || "不可用"}</span></div>`;
     } else {
-      const d = si.serverinfo;
+      const d = si;
       const items = [
         ["frp 版本", d.version || "-"],
-        ["运行时长", d.totalTrafficIn !== undefined ? "运行中" : "-"],
         ["客户端数", String(d.clientCounts ?? 0)],
         ["代理总数", Object.values(d.proxyTypeCount || {}).reduce((a, b) => a + b, 0)],
         ["入站流量", fmtBytes(d.totalTrafficIn)],
