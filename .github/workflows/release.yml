@@ -233,10 +233,86 @@ jobs:
           path: release/server/meilink-setup-*
 
   # -----------------------------------------------------------------------
-  # Job 4: 汇总所有产物到 Release
+  # Job 4: Docker 镜像（Docker 客户端 + Docker 服务端一体镜像）
+  #   - 推送到 GHCR（ghcr.io/<owner>/meilink-client / meilink-server）
+  #   - 同时导出 OCI 离线包（linux/amd64 + linux/arm64）作为 Release 附件，
+  #     供 NAS 等无法在线构建镜像的环境离线导入
+  # -----------------------------------------------------------------------
+  docker-images:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: client
+            context: client/docker
+            image: meilink-client
+            oci: meilink-docker-client
+            dest: release/client/docker
+          - name: server
+            context: server/docker-managed
+            image: meilink-server
+            oci: meilink-server
+            dest: release/server
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          v="${{ github.event.inputs.version || github.ref_name }}"
+          v="${v#v}"
+          echo "APP_VERSION=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ steps.ver.outputs.APP_VERSION }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
+
+      - name: Export OCI offline archive
+        shell: bash
+        run: |
+          set -e
+          mkdir -p "${{ matrix.dest }}"
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --output type=oci,dest="$GITHUB_WORKSPACE/${{ matrix.dest }}/${{ matrix.oci }}-${{ steps.ver.outputs.APP_VERSION }}.oci.tar" \
+            "${{ matrix.context }}"
+          ls -lh "${{ matrix.dest }}/"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: meilink-docker-${{ matrix.name }}
+          path: ${{ matrix.dest }}/${{ matrix.oci }}-${{ steps.ver.outputs.APP_VERSION }}.oci.tar
+
+  # -----------------------------------------------------------------------
+  # Job 5: 汇总所有产物到 Release
   # -----------------------------------------------------------------------
   publish-release:
-    needs: [tauri-desktop, swift-native, server-setup]
+    needs: [tauri-desktop, swift-native, server-setup, docker-images]
     runs-on: ubuntu-22.04
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     steps:
@@ -250,15 +326,17 @@ jobs:
       - name: Organize release files
         shell: bash
         run: |
-          mkdir -p release/client/macos-native release/client/desktop release/server
+          mkdir -p release/client/macos-native release/client/desktop release/client/docker release/server
           # 按产物名前缀分发到对应子目录
           find artifacts -type f | while read -r f; do
             base="$(basename "$f")"
             case "$base" in
-              meilink-setup-*)        cp "$f" release/server/ ;;
-              meilink-desktop-*)      cp "$f" release/client/desktop/ ;;
+              meilink-setup-*)          cp "$f" release/server/ ;;
+              meilink-docker-client-*)  cp "$f" release/client/docker/ ;;
+              meilink-server-*.oci.tar) cp "$f" release/server/ ;;
+              meilink-desktop-*)        cp "$f" release/client/desktop/ ;;
               meilink-*-macos-native*) cp "$f" release/client/macos-native/ ;;
-              *)                      cp "$f" release/ ;;
+              *)                        cp "$f" release/ ;;
             esac
           done
           echo "=== release/ 结构 ==="
@@ -273,4 +351,5 @@ jobs:
           files: |
             release/client/macos-native/*
             release/client/desktop/*
+            release/client/docker/*
             release/server/*

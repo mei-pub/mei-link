@@ -31,9 +31,15 @@
 ### 1.4 产物输出（按 client/server 子目录组织）
 - `release/client/macos-native/` — Swift 原生 DMG
 - `release/client/desktop/` — Tauri 桌面客户端安装包（.dmg/.msi/.deb/.AppImage）
-- `release/server/` — 服务端 setup 工具 tar.gz
+- `release/client/docker/` — Docker 客户端 OCI 离线包（`meilink-docker-client-<ver>.oci.tar`）
+- `release/server/` — 服务端 setup 工具 tar.gz + Docker 服务端 OCI 离线包（`meilink-server-<ver>.oci.tar`）
 - `build/Meilink.app` — 预构建 bundle（fallback）
 - `release/RELEASE_NOTES.md` — 发布说明
+
+### 1.6 CI 工作流
+- `client/docker/Dockerfile` — Docker 客户端镜像（Node 22 + frpc，:17420）
+- `server/docker-managed/Dockerfile` — Docker 服务端一体镜像（frps + Web 管理页，:17500）
+- `.github/workflows/release.yml` — 发布 CI（5 个 job，含 `docker-images`）
 
 ### 1.5 SDD 文档
 - [../sdd/07-build-release.md](../sdd/07-build-release.md)（必须同步）
@@ -62,6 +68,16 @@
 - Swift 原生：`meilink-<version>-macos-native.dmg`
 - Tauri 桌面：`meilink-desktop-<version>-<goos>-<goarch>.<ext>`
 - 服务端工具：`meilink-setup-<version>-linux-<goarch>.tar.gz`
+- Docker 客户端 OCI：`meilink-docker-client-<version>.oci.tar`
+- Docker 服务端 OCI：`meilink-server-<version>.oci.tar`
+
+### 2.9 Docker 镜像构建（CI `docker-images` job）
+- 镜像名：`meilink-client`（`client/docker/`）/ `meilink-server`（`server/docker-managed/`）
+- 推送到 `ghcr.io/<owner>/<image>:$version` + `:latest`
+- 架构：`linux/amd64` + `linux/arm64`（Dockerfile 用 `ARG TARGETARCH` 选择 frpc/frps 二进制）
+- 同时导出 OCI 离线包（`type=oci`）作 Release 附件，NAS 用 `docker load -i` 导入
+- 版本 tag 与发布版本号一致；`latest` 始终指向最近一次发布
+- frp 版本由 Dockerfile 的 `ARG FRP_VERSION` 控制，升级需六处同步（见 §2.1）
 
 ### 2.4 macOS 原生 .app bundle 结构
 由 Xcode（`xcodegen generate` + `xcodebuild`）或 SwiftPM 回退流程产出，是标准 Swift macOS app bundle：
@@ -264,5 +280,7 @@ ls Meilink.app/Contents/MacOS/frpc
 - [ ] macOS 原生客户端启动正常
 - [ ] 跨平台客户端在对应平台 runner 上构建成功
 - [ ] 服务端 setup 工具能正常部署
+- [ ] `docker-images` CI job 已推送 GHCR（`meilink-client` / `meilink-server`，含 `:latest`）
+- [ ] OCI 离线包已随 Release 附出且可 `docker load -i` 导入（amd64 + arm64）
 - [ ] 升级路径：旧版本配置能被新版本读取
 - [ ] SDD `07-build-release.md` 已同步

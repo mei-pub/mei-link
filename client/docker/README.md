@@ -10,6 +10,25 @@ export MEILINK_ADMIN_PASSWORD='use-a-long-random-password'
 docker compose -f docker-compose.client.yml up -d --build
 ```
 
+## Prebuilt image (GitHub Releases)
+
+Every release pushes a multi-arch (`linux/amd64` + `linux/arm64`) image to GHCR:
+
+```bash
+export MEILINK_ADMIN_PASSWORD='use-a-long-random-password'
+docker pull ghcr.io/<owner>/meilink-client:latest
+docker compose -f docker-compose.client.yml up -d
+# 或直接 run（--no-build 且 compose 里 image 指向 ghcr 标签时）：
+docker run -d --name meilink-client \
+  -p 17420:17420 \
+  -e MEILINK_ADMIN_PASSWORD="$MEILINK_ADMIN_PASSWORD" \
+  -v /path/on/nas/meilink-data:/data \
+  --restart unless-stopped \
+  ghcr.io/<owner>/meilink-client:latest
+```
+
+> 仓库名以小写为准：`ghcr.io/<owner>/meilink-client:<version>|latest`。
+
 ## Offline image deployment
 
 Use the release OCI archive when the NAS cannot build images itself. It contains

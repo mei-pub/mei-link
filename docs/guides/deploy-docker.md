@@ -185,6 +185,8 @@ cd server/docker-managed
 docker build -t meilink-server:latest .
 ```
 
+> 每次 GitHub Release 也会推送多架构镜像到 GHCR（`ghcr.io/<owner>/meilink-server:<version>|latest`，`linux/amd64` + `linux/arm64`），并附带 OCI 离线包 `meilink-server-<ver>.oci.tar`（`docker load -i` 导入，适合 NAS 离线部署）。用预构建镜像可跳过本地 `docker build`。
+
 - 支持 `amd64` 与 `arm64`（构建时按宿主架构自动选 frps 二进制，其他架构会报 `Unsupported architecture` 退出）
 - 构建过程会校验 frps 压缩包的 SHA256，校验失败自动中止
 - 无需 `npm install`（零运行时依赖，靠 Node 22 原生跑 TS）

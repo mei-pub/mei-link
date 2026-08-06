@@ -9,6 +9,10 @@
 | macOS 原生客户端 | macOS 13+ | `xcodegen generate` + `xcodebuild` 或 `swift build` | `Meilink.app` → DMG |
 | Tauri 桌面客户端 | macOS/Windows/Linux（各平台原生） | `scripts/build/build-desktop.sh` | DMG / MSI / DEB / AppImage |
 | 服务端部署工具 | Linux（amd64 + arm64 交叉编译） | `scripts/build/build-all.sh` | tar.gz |
+| Docker 客户端镜像 | linux/amd64 + linux/arm64 | `client/docker/Dockerfile` | GHCR 镜像 + OCI tar |
+| Docker 服务端一体镜像 | linux/amd64 + linux/arm64 | `server/docker-managed/Dockerfile` | GHCR 镜像 + OCI tar |
+
+> Docker 镜像由 CI（`.github/workflows/release.yml` 的 `docker-images` job）用 buildx 构建并推送到 GHCR（`ghcr.io/<owner>/meilink-client` / `meilink-server`），同时导出 OCI 离线包作为 Release 附件（NAS 等无法在线构建的环境用 `docker load -i` 导入）。本地构建见 [../guides/deploy-docker.md](../guides/deploy-docker.md)。
 
 ## 2. macOS 原生客户端构建
 
@@ -104,20 +108,26 @@ release/
 ├── client/                                  # 客户端产物
 │   ├── macos-native/                        #   macOS 原生客户端
 │   │   └── meilink-<ver>-macos-native.dmg
-│   └── desktop/                             #   Tauri 桌面客户端
-│       ├── meilink-desktop-<ver>-darwin-<arch>.dmg
-│       ├── meilink-desktop-<ver>-linux-<arch>.deb
-│       ├── meilink-desktop-<ver>-linux-<arch>.AppImage
-│       └── meilink-desktop-<ver>-windows-<arch>.msi
+│   ├── desktop/                             #   Tauri 桌面客户端
+│   │   ├── meilink-desktop-<ver>-darwin-<arch>.dmg
+│   │   ├── meilink-desktop-<ver>-linux-<arch>.deb
+│   │   ├── meilink-desktop-<ver>-linux-<arch>.AppImage
+│   │   └── meilink-desktop-<ver>-windows-<arch>.msi
+│   └── docker/                              #   Docker 客户端 OCI 离线包
+│       └── meilink-docker-client-<ver>.oci.tar
 └── server/                                  # 服务端产物
     ├── meilink-setup-<ver>-linux-amd64.tar.gz
-    └── meilink-setup-<ver>-linux-arm64.tar.gz
+    ├── meilink-setup-<ver>-linux-arm64.tar.gz
+    └── meilink-server-<ver>.oci.tar         #   Docker 服务端一体镜像 OCI 离线包
 ```
 
 ### 5.2 命名约定
 - Swift 原生：`meilink-<version>-macos-native.dmg`
 - Tauri 桌面：`meilink-desktop-<version>-<goos>-<goarch>.<ext>`
 - 服务端工具：`meilink-setup-<version>-linux-<goarch>.tar.gz`
+- Docker 客户端 OCI：`meilink-docker-client-<version>.oci.tar`
+- Docker 服务端 OCI：`meilink-server-<version>.oci.tar`
+- GHCR 镜像：`ghcr.io/<owner>/meilink-client:<version>|latest` / `ghcr.io/<owner>/meilink-server:<version>|latest`
 
 ### 5.3 版本号来源
 - `scripts/build/build-all.sh` 第一个参数，默认 `1.1.0`
@@ -188,28 +198,32 @@ docker compose up -d
 ### 7.4 `scripts/dev/setup-dev.sh`
 - 一键设置开发环境：检查 Swift + 下载 frpc + `swift build`
 
-## 8. CI 提示（未实现，建议）
+## 8. CI 流程（已实现，`.github/workflows/release.yml`）
 
-基于当前 `scripts/` 与 `docs/archive/` 的对齐文档，建议的 CI 流程：
+触发方式：推送 `v*` tag 或 `workflow_dispatch`（可手动填版本号）。由 5 个 job 组成，最后 `publish-release` 汇总产物到 GitHub Release：
 
-### 8.1 macOS runner
-- `bash scripts/build/build-all.sh <version>`（需 Xcode + Go + xcodegen）
-- 产出：所有 tar.gz / DMG / zip / setup 工具
+### 8.1 `tauri-desktop` — Tauri 桌面客户端
+- 矩阵：macos-14 / windows-latest / ubuntu-22.04
+- `bash scripts/build/build-desktop.sh --copy <version>`
+- 产出：`meilink-desktop-<ver>-<goos>-<goarch>.<ext>`（DMG / MSI / DEB / AppImage）
 
-### 8.2 Linux runner
-- `bash scripts/build/build-desktop.sh --copy`（Tauri Linux 桌面客户端，含 Go sidecar 编译）
-- 产出：`meilink-desktop-<ver>-linux-*.deb` / `meilink-setup-<ver>-linux-*.tar.gz`
+### 8.2 `swift-native` — macOS 原生客户端
+- runner：macos-14，`swift build -c release` + SwiftPM 回退打包 DMG
+- 产出：`meilink-<ver>-macos-native.dmg`
 
-### 8.3 Windows runner
-- `bash scripts/build/build-desktop.sh --copy`（Tauri Windows 桌面客户端，含 Go sidecar 编译）
-- 产出：`meilink-desktop-<ver>-windows-*.msi`
+### 8.3 `server-setup` — 服务端 setup 工具
+- runner：ubuntu-22.04，交叉编译 linux amd64 + arm64
+- 产出：`meilink-setup-<ver>-linux-<arch>.tar.gz`
 
-### 8.4 测试
-- `swift build`（SwiftPM 编译验证）
-- `swift test`（当前 `Tests/` 为空，需补测试）
-- `go test ./...`（桌面客户端 Go sidecar 测试，源码在 `client/desktop/sidecar/internal/`）
-- `cargo test`（Tauri Rust 测试）
-- `npm run build`（前端构建验证）
+### 8.4 `docker-images` — Docker 镜像
+- runner：ubuntu-22.04，`setup-qemu` + `setup-buildx`，登录 GHCR
+- 矩阵：`client/docker` → `meilink-client`；`server/docker-managed` → `meilink-server`
+- 构建 `linux/amd64 + linux/arm64` 多架构镜像，推送 `ghcr.io/<owner>/<image>:<version>` + `:latest`
+- 同时导出 OCI 离线包（`type=oci`）作为 Release 附件：`meilink-docker-client-<ver>.oci.tar` / `meilink-server-<ver>.oci.tar`
+- 需要 GHCR 权限：`permissions.packages: write`（用 `GITHUB_TOKEN`，无需额外 secrets）
+
+### 8.5 `publish-release` — 汇总发布
+- `needs` 依赖上述 4 个 job，按产物名前缀分发到 `release/` 子目录后 `action-gh-release` 建 Release
 
 ## 9. 发布检查清单
 
@@ -224,4 +238,7 @@ docker compose up -d
 - [ ] macOS 原生客户端在 `xcodegen generate` + `xcodebuild` 后能正常启动
 - [ ] 跨平台客户端在 macOS / Linux / Windows 各自 runner 上能构建
 - [ ] 服务端 setup 工具能正常部署 frps
+- [ ] Docker 镜像 CI（`docker-images` job）已推送 GHCR：`ghcr.io/<owner>/meilink-client:<ver>` / `ghcr.io/<owner>/meilink-server:<ver>` + `:latest`
+- [ ] Docker 镜像能正常启动：客户端管理页 `:17420`、服务端管理页 `:17500`（含 frps 7000/8080/8443）
+- [ ] 验证 OCI 离线包可 `docker load -i` 导入（amd64 + arm64 双架构）
 - [ ] 验证升级路径：旧版本配置能被新版本读取

@@ -12,6 +12,24 @@ docker compose up -d
 docker compose logs -f meilink-server
 ```
 
+## 预构建镜像（GitHub Releases）
+
+每次发布都会推送多架构（`linux/amd64` + `linux/arm64`）镜像到 GHCR：
+
+```bash
+docker pull ghcr.io/<owner>/meilink-server:latest
+docker run -d --name meilink-server --restart unless-stopped \
+  --network host \
+  -v /volume1/docker/meilink-server:/data \
+  -e MEILINK_ADMIN_USER=admin \
+  -e MEILINK_ADMIN_PASSWORD='replace-with-a-strong-password' \
+  -e MEILINK_FRPS_TOKEN='replace-with-a-long-frp-token' \
+  -e MEILINK_DOMAIN_API_TOKEN='replace-with-a-bootstrap-token' \
+  ghcr.io/<owner>/meilink-server:latest
+```
+
+> 仓库名以小写为准：`ghcr.io/<owner>/meilink-server:<version>|latest`。
+
 首次启动后浏览器打开 `http://服务器IP:17500`（若 17500 绑了 127.0.0.1，先用 SSH 端口转发：`ssh -L 17500:127.0.0.1:17500 user@vps`），使用环境变量中的账号密码登录，并在页面维护 frps 端口和域名目录。
 
 ## 网络模式：host
