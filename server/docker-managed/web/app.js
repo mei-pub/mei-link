@@ -120,13 +120,15 @@ async function refreshTunnelStatus() {
         const badge = status === "running" || status === "online"
           ? `<span class="badge running">${status}</span>`
           : `<span class="badge new">${status}</span>`;
-        // frps dashboard 返回 snake_case：
-        //   TCP/UDP: 顶层 remote_addr (例如 "1.2.3.4:6000")
-        //   HTTP/HTTPS: conf.custom_domains / conf.subdomain + 服务端 subDomainHost
+        // frps v1 dashboard API (/api/proxy/{type}) 返回 ProxyStatsInfo：
+        //   name, status ("online"/"offline"), conf (嵌套配置对象)
+        // HTTP/HTTPS 的 conf 含 DomainConfig 字段：customDomains (camelCase!) / subdomain。
+        // TCP/UDP 的 conf 含 remotePort，无域名。
+        // 参见 frp v0.70.0 server/http/model/types.go + pkg/config/v1/proxy.go 的 DomainConfig。
         const conf = p.conf || {};
         let remote = p.remote_addr || "";
         if (!remote) {
-          const cds = conf.custom_domains || p.custom_domains || [];
+          const cds = conf.customDomains || conf.custom_domains || [];
           if (Array.isArray(cds) && cds.length) {
             remote = cds.join(", ");
           } else if (conf.subdomain || p.subdomain) {
