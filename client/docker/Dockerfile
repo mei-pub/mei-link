@@ -1,5 +1,8 @@
 FROM node:22-alpine
 
+# GHCR 用该 label 把 package 与源仓库绑定，确保 GITHUB_TOKEN 有 push 权限
+LABEL org.opencontainers.image.source="https://github.com/tomtrije/mei-link"
+
 ARG TARGETARCH
 ARG FRP_VERSION=0.70.0
 RUN set -eux; \

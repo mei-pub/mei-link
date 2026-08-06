@@ -294,6 +294,8 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ steps.ver.outputs.APP_VERSION }}
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
 
       - name: Export OCI offline archive
         shell: bash

@@ -221,6 +221,7 @@ docker compose up -d
 - 构建 `linux/amd64 + linux/arm64` 多架构镜像，推送 `ghcr.io/<owner>/<image>:<version>` + `:latest`
 - 同时导出 OCI 离线包（`type=oci`）作为 Release 附件：`meilink-docker-client-<ver>.oci.tar` / `meilink-server-<ver>.oci.tar`
 - 需要 GHCR 权限：`permissions.packages: write`（用 `GITHUB_TOKEN`，无需额外 secrets）
+- **必须带 `org.opencontainers.image.source` label**（Dockerfile 里写死 + build-push-action `labels` 双保险）。GHCR 靠它把 package 与源仓库绑定；缺失时 package 会处于"未关联"状态，导致 GITHUB_TOKEN push 时报 `403 Forbidden`（`HEAD request ... 403`）。已在 `client/docker/Dockerfile` 与 `server/docker-managed/Dockerfile` 顶部写入 `https://github.com/tomtrije/mei-link`
 
 ### 8.5 `publish-release` — 汇总发布
 - `needs` 依赖上述 4 个 job，按产物名前缀分发到 `release/` 子目录后 `action-gh-release` 建 Release

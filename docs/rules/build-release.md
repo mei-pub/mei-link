@@ -78,6 +78,7 @@
 - 同时导出 OCI 离线包（`type=oci`）作 Release 附件，NAS 用 `docker load -i` 导入
 - 版本 tag 与发布版本号一致；`latest` 始终指向最近一次发布
 - frp 版本由 Dockerfile 的 `ARG FRP_VERSION` 控制，升级需六处同步（见 §2.1）
+- **必须带 `org.opencontainers.image.source` label**（值 = 源仓库 URL，如 `https://github.com/<owner>/mei-link`）。GHCR 用它把 package 与仓库绑定，缺失时 GITHUB_TOKEN push 会报 `403 Forbidden`（可`HEAD`/`POST` blob 403）。Dockerfile + build-push-action `labels` 都要有
 
 ### 2.4 macOS 原生 .app bundle 结构
 由 Xcode（`xcodegen generate` + `xcodebuild`）或 SwiftPM 回退流程产出，是标准 Swift macOS app bundle：
