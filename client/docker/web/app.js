@@ -214,3 +214,14 @@ $("#copyLogsButton").addEventListener("click", () => copyText(formatLogs(), "运
 $("#exportLogsButton").addEventListener("click", () => { const blob = new Blob([formatLogs() || "尚无运行日志\n"], { type: "text/plain;charset=utf-8" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `meilink-log-${new Date().toISOString().replace(/[:.]/g, "-")}.txt`; link.click(); URL.revokeObjectURL(link.href); });
 $("#clearLogsButton").addEventListener("click", async () => { if (!events.length || !confirm("确定清空当前运行日志吗？")) return; try { await api("/api/events", { method: "DELETE" }); notify("运行日志已清空"); await load(); } catch (error) { notify(error.message, true); } });
 $("#logoutButton").addEventListener("click", async () => { clearInterval(polling); await api("/api/logout", { method: "POST" }); location.reload(); });
+
+(async function restoreSession() {
+  try {
+    const status = await api("/api/status");
+    if (status && !status.unauthorized) {
+      $("#loginView").classList.add("hidden");
+      $("#appView").classList.remove("hidden");
+      await load(); beginPolling();
+    }
+  } catch (error) { /* 未登录或会话过期，保持登录页 */ }
+})();

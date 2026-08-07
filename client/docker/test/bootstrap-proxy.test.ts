@@ -92,6 +92,19 @@ test("bootstrap proxy forwards server info and prefill fields", async () => {
   }
 });
 
+test("bootstrap proxy returns a clear error before any config is saved", async () => {
+  const app = await startApp();
+  try {
+    const res = await fetch(`${app.base}/api/bootstrap`, { headers: app.headers });
+    assert.equal(res.status, 200);
+    const info = await res.json() as { error?: string };
+    assert.match(info.error || "", /未配置/);
+  } finally {
+    await new Promise<void>(resolve => app.server.close(() => resolve()));
+    await rm(app.dataDir, { recursive: true, force: true });
+  }
+});
+
 test("bootstrap proxy surfaces token errors instead of falling back silently", async () => {
   const mock = await startMockServer();
   const app = await startApp();

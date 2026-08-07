@@ -124,12 +124,12 @@ export async function createMeilinkServer(options: MeilinkServerOptions = {}): P
       // 失败返回 {error} 让前端 fallback 到手填。
       if (url.pathname === "/api/domains" && request.method === "GET") {
         const cfg = manager.serverConfig();
-        const result = await fetchManagement(cfg.managementURL, cfg.domainAPIToken, "/api/domains");
+        const result = cfg ? await fetchManagement(cfg.managementURL, cfg.domainAPIToken, "/api/domains") : { error: "未配置管理页地址或 token" };
         return json(response, 200, result);
       }
       if (url.pathname === "/api/bootstrap" && request.method === "GET") {
         const cfg = manager.serverConfig();
-        const result = await fetchManagement(cfg.managementURL, cfg.domainAPIToken, "/api/bootstrap");
+        const result = cfg ? await fetchManagement(cfg.managementURL, cfg.domainAPIToken, "/api/bootstrap") : { error: "未配置管理页地址或 token" };
         return json(response, 200, result);
       }
       if (url.pathname === "/api/control/start" && request.method === "POST") {
