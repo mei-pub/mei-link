@@ -88,10 +88,12 @@ frp 只支持一个 `subDomainHost`。因此，不能把 `*.tunnel.example.com` 
 
 ## 环境变量
 
+> 下表变量已在 Dockerfile 中声明为 `ENV`，在 NAS 容器 UI / docker 管理工具创建容器时会直接显示。密码与 Token 默认值为空，**必须填写**。
+
 | 变量 | 必填 | 用途 |
 |---|---:|---|
-| `MEILINK_ADMIN_USER` | 是 | 管理页登录用户名 |
-| `MEILINK_ADMIN_PASSWORD` | 是 | 管理页登录密码 |
+| `MEILINK_ADMIN_USER` | 是 | 管理页登录用户名，默认 `admin` |
+| `MEILINK_ADMIN_PASSWORD` | 是 | 管理页登录密码（默认空，必须设置）|
 | `MEILINK_FRPS_TOKEN` | 建议 | 首次启动时的 frps Token；也可在管理页面首次保存 |
 | `MEILINK_WEB_PORT` | 否 | 管理页端口，默认 `17500` |
 | `MEILINK_FRPS_BIND_PORT` | 否 | 客户端连接端口，默认 `7000` |

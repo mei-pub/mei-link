@@ -36,7 +36,21 @@ RUN chmod +x docker-entrypoint.sh
 
 # 注意：不设 USER meilink —— entrypoint 需以 root 启动来 chown 挂载卷，
 # 随后用 su-exec 降权为 meilink 运行 node 服务。
-ENV MEILINK_DATA_DIR=/data MEILINK_FRPS_PATH=/usr/local/bin/frps MEILINK_WEB_PORT=17500
+# ENV 声明让 NAS 容器 UI 能显示这些配置项；密码/Token 默认空，必须填写。
+ENV MEILINK_DATA_DIR=/data \
+    MEILINK_FRPS_PATH=/usr/local/bin/frps \
+    MEILINK_WEB_PORT=17500 \
+    MEILINK_ADMIN_USER=admin \
+    MEILINK_ADMIN_PASSWORD= \
+    MEILINK_FRPS_TOKEN= \
+    MEILINK_DOMAIN_API_TOKEN= \
+    MEILINK_PRIMARY_DOMAIN= \
+    MEILINK_FRPS_BIND_PORT=7000 \
+    MEILINK_FRPS_HTTP_PORT=8080 \
+    MEILINK_FRPS_HTTPS_PORT=8443 \
+    MEILINK_DASHBOARD_PORT=7500 \
+    MEILINK_DASHBOARD_USER=admin \
+    MEILINK_DASHBOARD_PASSWORD=admin
 VOLUME ["/data"]
 EXPOSE 7000 8080 8443 17500
 HEALTHCHECK CMD node -e "fetch('http://127.0.0.1:17500/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
