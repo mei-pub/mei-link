@@ -34,16 +34,16 @@ async function sendFile(response: ServerResponse, webDir: string, file: string, 
 
 /** 代理请求服务端管理页。失败返回 {error}，成功透传管理页 JSON。 */
 async function fetchManagement(managementURL: string | undefined, token: string | undefined, path: string): Promise<Record<string, unknown>> {
-  if (!managementURL || !token) return { domains: [], error: "未配置管理页地址或 token" };
+  if (!managementURL || !token) return { error: "未配置管理页地址或 token" };
   const base = managementURL.replace(/\/+$/, "");
   try {
     const res = await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000) });
-    if (res.status === 404) return { domains: [], error: "服务端未启用域名接口" };
-    if (res.status === 401) return { domains: [], error: "域名拉取 token 错误" };
-    if (!res.ok) return { domains: [], error: `管理页返回 HTTP ${res.status}` };
+    if (res.status === 404) return { error: "服务端未启用接口（未配 MEILINK_DOMAIN_API_TOKEN）" };
+    if (res.status === 401) return { error: "域名拉取 token 错误" };
+    if (!res.ok) return { error: `管理页返回 HTTP ${res.status}` };
     return await res.json() as Record<string, unknown>;
   } catch (e) {
-    return { domains: [], error: `无法连接管理页: ${e instanceof Error ? e.message : String(e)}` };
+    return { error: `无法连接管理页: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
 
@@ -121,7 +121,7 @@ export async function createMeilinkServer(options: MeilinkServerOptions = {}): P
         return json(response, 201, { ok: true });
       }
       // 代理到服务端管理页拉取域名目录 / 启动信息，简化隧道编辑（选基域+填前缀）。
-      // 失败返回 {domains:[], error} 让前端 fallback 到手填。
+      // 失败返回 {error} 让前端 fallback 到手填。
       if (url.pathname === "/api/domains" && request.method === "GET") {
         const cfg = manager.serverConfig();
         const result = await fetchManagement(cfg.managementURL, cfg.domainAPIToken, "/api/domains");

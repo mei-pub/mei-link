@@ -185,6 +185,22 @@ $("#loginForm").addEventListener("submit", async event => { event.preventDefault
 document.querySelectorAll("[data-view]").forEach(item => item.addEventListener("click", () => setView(item.dataset.view)));
 $("#configForm").addEventListener("submit", async event => { event.preventDefault(); const button = event.submitter; setBusy(button, true); try { await saveConfig(); } catch (error) { notify(error.message, true); } finally { setBusy(button, false); } });
 $("#saveAndConnectButton").addEventListener("click", async event => { setBusy(event.currentTarget, true); try { await saveConfig(true); } catch (error) { notify(error.message, true); } finally { setBusy(event.currentTarget, false); } });
+$("#fetchBootstrapButton").addEventListener("click", async event => {
+  const result = $("#bootstrapResult"); setBusy(event.currentTarget, true);
+  result.textContent = "正在拉取配置…"; result.className = "test-result";
+  try {
+    const info = await api("/api/bootstrap");
+    if (!info || info.error) throw new Error((info && info.error) || "拉取失败");
+    const form = $("#configForm");
+    if (info.serverAddr) field(form, "serverAddr").value = info.serverAddr;
+    if (info.serverPort) field(form, "serverPort").value = info.serverPort;
+    if (info.authToken) field(form, "authToken").value = info.authToken;
+    if (info.subDomainHost) field(form, "subDomainHost").value = info.subDomainHost;
+    result.textContent = `已拉取：${info.serverAddr || "未设置"}:${info.serverPort}，子域名根域 ${info.subDomainHost || "未设置"}`;
+    result.className = "test-result ok";
+  } catch (error) { result.textContent = `拉取失败：${error.message}`; result.className = "test-result error"; }
+  finally { setBusy(event.currentTarget, false); }
+});
 $("#testConnectionButton").addEventListener("click", async event => { const result = $("#connectionTestResult"); setBusy(event.currentTarget, true); result.textContent = "正在测试连接…"; result.className = "test-result"; try { const form = $("#configForm"); const outcome = await api("/api/test-connection", { method: "POST", body: JSON.stringify({ addr: formValue(form, "serverAddr"), port: Number(formValue(form, "serverPort")) }) }); result.textContent = outcome.ok ? "服务器端口可连接" : `连接失败：${outcome.err || "未知错误"}`; result.className = `test-result ${outcome.ok ? "ok" : "error"}`; } catch (error) { result.textContent = `测试失败：${error.message}`; result.className = "test-result error"; } finally { setBusy(event.currentTarget, false); } });
 $("#newTunnelButton").addEventListener("click", () => openTunnelDialog()); $("#closeTunnelDialog").addEventListener("click", closeTunnelDialog); $("#cancelTunnelButton").addEventListener("click", closeTunnelDialog);
 document.querySelectorAll('input[name="type"]').forEach(input => input.addEventListener("change", typeFields));
