@@ -36,6 +36,8 @@
 - `build/Meilink.app` — 预构建 bundle（fallback）
 - `release/RELEASE_NOTES.md` — 发布说明
 
+> `release/` 下的产物（`.dmg`/`.tar.gz`/`.oci.tar`/`.msi`/`.zip`）已加入 `.gitignore`，**不入库**；仓库仅跟踪各目录 `.gitkeep` 占位文件与 `RELEASE_NOTES.md`。发布由 CI `publish-release` 统一清理 + 汇总，本地构建产物勿提交。
+
 ### 1.6 CI 工作流
 - `client/docker/Dockerfile` — Docker 客户端镜像（Node 22 + frpc，:17420）
 - `server/docker-managed/Dockerfile` — Docker 服务端一体镜像（frps + Web 管理页，:17500）
@@ -122,6 +124,7 @@ Meilink.app/
 - Linux 主机 → 只能构建 Linux
 - Windows 主机 → 只能构建 Windows
 - 多平台发布必须在对应平台的 CI runner 上执行
+- Windows 客户端仅构建 **amd64**（x86_64）单包，不按芯片拆分 arm64
 
 ## 3. 同步修改清单
 
@@ -229,6 +232,8 @@ rm release/client/macos-native/meilink-1.1.0-*
 mkdir release/archive && mv release/client/macos-native/meilink-1.1.0-* release/archive/
 ```
 
+> 自 v1.2.0 起，CI `publish-release` 会在上传前自动清理 `release/` 下陈旧产物（`*.dmg`/`*.tar.gz`/`*.oci.tar`/`*.msi`/`*.zip`），且产物已加入 `.gitignore` 不入库。本地构建仍建议按上述方法维护 `release/`。
+
 ### 4.6 反例：改 frpc 集成不验证
 ```yaml
 # ❌ 错误：改了 project.yml 的 preBuildScripts 但没验证 frpc 下载
@@ -276,7 +281,7 @@ ls Meilink.app/Contents/MacOS/frpc
 ### 5.5 发布检查清单
 - [ ] frp 版本三处同步
 - [ ] 图标已更新 + `gen-icons.sh` 已重跑
-- [ ] `release/` 旧产物已清理
+- [ ] `release/` 旧产物已清理（CI `publish-release` 会自动清理；本地构建手动清理）
 - [ ] `RELEASE_NOTES.md` 已更新
 - [ ] macOS 原生客户端启动正常
 - [ ] 跨平台客户端在对应平台 runner 上构建成功

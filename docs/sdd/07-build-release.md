@@ -14,6 +14,8 @@
 
 > Docker 镜像由 CI（`.github/workflows/release.yml` 的 `docker-images` job）用 buildx 构建并推送到 GHCR（`ghcr.io/<owner>/meilink-client` / `meilink-server`），同时导出 OCI 离线包作为 Release 附件（NAS 等无法在线构建的环境用 `docker load -i` 导入）。本地构建见 [../guides/deploy-docker.md](../guides/deploy-docker.md)。
 
+> 平台矩阵：Windows 客户端仅构建 **amd64**（x86_64）单包，不按芯片拆分 arm64；macOS 仅构建 arm64（macos-14 runner）。
+
 ## 2. macOS 原生客户端构建
 
 ### 2.1 开发环境准备
@@ -120,6 +122,8 @@ release/
     ├── meilink-setup-<ver>-linux-arm64.tar.gz
     └── meilink-server-<ver>.oci.tar         #   Docker 服务端一体镜像 OCI 离线包
 ```
+
+> `release/` 下的产物（`.dmg`/`.tar.gz`/`.oci.tar`/`.msi`/`.zip`）已加入 `.gitignore`，**不入库**；仓库仅跟踪各目录 `.gitkeep` 占位文件与 `RELEASE_NOTES.md`。
 
 ### 5.2 命名约定
 - Swift 原生：`meilink-<version>-macos-native.dmg`
@@ -232,6 +236,7 @@ docker compose up -d
 
 ### 8.5 `publish-release` — 汇总发布
 - `needs` 依赖上述 4 个 job，按产物名前缀分发到 `release/` 子目录后 `action-gh-release` 建 Release
+- 分发前先清理 checkout 带入的陈旧发布产物（`*.dmg`/`*.tar.gz`/`*.oci.tar`/`*.msi`/`*.zip`），确保 Release 附件只含本次构建产物（`.gitkeep` / `RELEASE_NOTES.md` 不受影响）
 - `download-artifact` 用 `pattern: "!*.dockerbuild"` 排除 build-push-action 自动上传的构建记录产物（否则全量下载会因 dockerbuild 元数据解压失败）；`docker-images` 侧同时设 `DOCKER_BUILD_RECORD_UPLOAD=false` 直接禁止上传
 
 ## 9. 发布检查清单
@@ -241,7 +246,7 @@ docker compose up -d
 - [ ] frp 版本号在六处一致：`scripts/assets/download-frpc.sh` / `scripts/build/build-frpc.sh` / `scripts/build/build-desktop.sh` / `server/bare-metal/deploy-frps.sh` / `server/docker-managed/Dockerfile` / `server/setup/main.go`
 - [ ] `client/macos-native/Resources/AppIcon.png` 与 `AppIcon.icns` 已更新（若改了图标）
 - [ ] `scripts/assets/gen-icons.sh` 已重跑（若改了源图标）
-- [ ] `release/` 目录里旧的产物已清理或归档
+- [ ] `release/` 目录里旧的产物已清理或归档（CI `publish-release` 会自动清理；本地构建需手动清理）
 - [ ] `RELEASE_NOTES.md` 已更新
 - [ ] `CFBundleShortVersionString`（Info.plist）与 `build-all.sh` 的 `VERSION` 对齐（目前 1.0.0 vs 1.1.0 不一致，建议统一）
 - [ ] macOS 原生客户端在 `xcodegen generate` + `xcodebuild` 后能正常启动

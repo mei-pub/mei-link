@@ -78,20 +78,11 @@ settings before starting tunnels. Persistent configuration is in `./data`.
 
 ## Pull config from the server (optional)
 
-If the Meilink server runs the management page with `MEILINK_DOMAIN_API_TOKEN`
-set, the client can auto-fill the frps connection settings instead of typing
-them manually:
-
-1. In **服务器设置**, fill in **管理页地址** (e.g. `http://aicun.cc:17500`) and
-   **域名拉取 Token**.
-2. Click **拉取配置** — the client fetches `GET /api/bootstrap` and fills
-   server address / port / token / subdomain root automatically.
-3. The same server API powers the domain picker when editing HTTP/HTTPS
-   tunnels (choose a base domain + prefix instead of typing full subdomains).
-
-Nothing is saved until you press **保存设置**. If the server has no
-`MEILINK_DOMAIN_API_TOKEN`, the button reports the error and you can still fill
-everything by hand.
+If the Meilink server management page has `MEILINK_DOMAIN_API_TOKEN` set, the
+client can auto-fill frps connection settings and power the base-domain picker
+when editing HTTP/HTTPS tunnels. In **服务器设置**, fill in **管理页地址** and
+**域名拉取 Token**, then click **拉取配置** (nothing is saved until you press
+**保存设置**). Server-side configuration lives in the [server Docker README](../../server/docker-managed/README.md).
 
 ## Security
 

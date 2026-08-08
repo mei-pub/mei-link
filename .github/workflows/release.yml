@@ -374,6 +374,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p release/client/macos-native release/client/desktop release/client/docker release/server
+          # 清理 checkout 带入的陈旧发布产物（如被误提交/本地残留的 .dmg/.tar.gz）。
+          # 上传内容必须全部来自本次下载的 artifacts，避免旧包混入 Release 附件。
+          # .gitkeep / RELEASE_NOTES.md 不受影响。
+          find release -type f \( -name '*.dmg' -o -name '*.tar.gz' -o -name '*.oci.tar' -o -name '*.msi' -o -name '*.zip' \) -delete
           # 按产物名前缀分发到对应子目录
           find artifacts -type f | while read -r f; do
             base="$(basename "$f")"

@@ -18,6 +18,8 @@
 | `meilink-setup-1.1.0-linux-amd64.tar.gz` | Linux amd64 | 服务端部署工具 |
 | `meilink-setup-1.1.0-linux-arm64.tar.gz` | Linux arm64 | 服务端部署工具 |
 
+> Windows 客户端仅提供 **amd64** 安装包（未按芯片拆包）；Linux 客户端当前仅 amd64。
+
 ## macOS 安装说明（重要）
 
 ### 跨平台桌面客户端（`meilink-desktop-1.1.0-darwin-arm64.dmg`）

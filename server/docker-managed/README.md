@@ -80,11 +80,13 @@ docker run -d --name meilink-server --restart unless-stopped \
 
 ## 域名与泛域名
 
-- **主域名**：例如 `tunnel.example.com`。管理页会写入 frps 的 `subDomainHost`；在 DNS 将 `*.tunnel.example.com` 解析到服务器。客户端填写子域名 `photo`，访问地址为 `photo.tunnel.example.com`。
-- **额外域名**：例如 `photo.example.com`。在 DNS 解析到服务器；客户端在 HTTP/HTTPS 隧道的“自定义域名”中填写该完整域名。
-- **泛域名**：例如 `*.apps.example.com`。在 DNS 添加同名泛解析记录；客户端可将该泛域名作为自定义域名，用于将该泛域名下的请求路由至同一 HTTP/HTTPS 隧道。
+- **主域名**：写入 frps 的 `subDomainHost`（例如 `tunnel.example.com`），并在 DNS 将 `*.tunnel.example.com` 泛解析到服务器。
+- **额外域名**：例如 `photo.example.com`，DNS 解析到服务器，作为 HTTP/HTTPS 隧道的“自定义域名”。
+- **泛域名**：例如 `*.apps.example.com`，DNS 添加同名泛解析，作为自定义域名使用。
 
-frp 只支持一个 `subDomainHost`。因此，不能把 `*.tunnel.example.com` 再作为自定义泛域名添加；管理页会拒绝这种与主域名重叠的配置。额外域名和泛域名需要使用不同的域名空间，例如主域名为 `tunnel.example.com` 时，可用 `*.apps.example.com`。
+frp 只支持一个 `subDomainHost`，因此不能把 `*.tunnel.example.com` 再作为自定义泛域名添加；管理页会拒绝与主域名重叠的配置。额外域名和泛域名需使用不同域名空间（例如主域名 `tunnel.example.com` 配 `*.apps.example.com`）。
+
+客户端侧的域名填写与安装见 [`client/docker/README.md`](../../client/docker/README.md) 与 GitHub [Releases](https://github.com/tomtrije/mei-link/releases) 下载页。
 
 ## 环境变量
 
@@ -100,7 +102,7 @@ frp 只支持一个 `subDomainHost`。因此，不能把 `*.tunnel.example.com` 
 | `MEILINK_FRPS_HTTP_PORT` | 否 | HTTP vhost 端口，默认 `8080` |
 | `MEILINK_FRPS_HTTPS_PORT` | 否 | HTTPS vhost 端口，默认 `8443` |
 | `MEILINK_PRIMARY_DOMAIN` | 否 | 首次启动时的主域名 |
-| `MEILINK_DOMAIN_API_TOKEN` | **推荐** | 配置后启用 `GET /api/bootstrap` + `GET /api/domains`。客户端 SetupView 只需填「管理页地址 + 这个 Token」即可自动拉取 frps 地址/端口/Token/子域名基域。客户端用 Bearer token 访问，独立于管理页登录账号 |
+| `MEILINK_DOMAIN_API_TOKEN` | **推荐** | 配置后启用 `GET /api/bootstrap` + `GET /api/domains`，供客户端自动拉取 frps 地址/端口/Token/子域名基域（Bearer token 访问，独立于管理页账号）。客户端用法见 [`client/docker/README.md`](../../client/docker/README.md) |
 | `MEILINK_DASHBOARD_USER` | 否 | frps 内置 dashboard 用户名，默认 `admin`（仅容器内 127.0.0.1，外部访问不到；管理页「隧道状态」Tab 用它拉代理列表）|
 | `MEILINK_DASHBOARD_PASSWORD` | 否 | frps 内置 dashboard 密码，默认 `admin` |
 | `MEILINK_DASHBOARD_PORT` | 否 | frps dashboard 端口，默认 `7500` |
