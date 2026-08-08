@@ -40,7 +40,9 @@
 
 ### 1.6 CI 工作流
 - `client/docker/Dockerfile` — Docker 客户端镜像（Node 22 + frpc，:17420）
+- `client/docker/docker-entrypoint.sh` — 客户端容器入口（root chown `/data` → su-exec 降权 meilink）
 - `server/docker-managed/Dockerfile` — Docker 服务端一体镜像（frps + Web 管理页，:17500）
+- `server/docker-managed/docker-entrypoint.sh` — 服务端容器入口（root chown `/data` → su-exec 降权 meilink）
 - `.github/workflows/release.yml` — 发布 CI（5 个 job，含 `docker-images`）
 
 ### 1.5 SDD 文档
