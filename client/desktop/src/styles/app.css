@@ -130,6 +130,7 @@ select.form-input { cursor: pointer; }
 }
 .status-dot.running { background: var(--success); }
 .status-dot.connecting { background: var(--warning); }
+.status-dot.error { background: var(--danger); }
 .status-dot.stopped { background: var(--text-tertiary); }
 
 /* Tunnel status badge */

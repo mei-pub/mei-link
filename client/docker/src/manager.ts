@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { connect } from "node:net";
 import { generateFrpcToml, type ServerConfig } from "./config.ts";
 import { FrpcProcess } from "./frpc.ts";
+import { ReconnectController } from "./reconnect.ts";
 import { toProxyDefinition } from "./proxy.ts";
 import { routeText } from "./display.ts";
 import { mergeRuntimeStatus } from "./runtime-status.ts";
@@ -10,6 +11,10 @@ import { DataStore, type Tunnel } from "./store.ts";
 
 export type TunnelInput = Omit<Tunnel, "id" | "status" | "runtimeStatus" | "remoteAddr" | "errorMessage" | "createdAt" | "updatedAt">;
 const validPort = (value: number) => Number.isInteger(value) && value >= 1 && value <= 65535;
+const clampInt = (value: number | undefined, min: number, max: number, fallback: number) => {
+  if (typeof value !== "number" || !Number.isInteger(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+};
 
 export class TunnelManager {
   private frpc: FrpcProcess;
@@ -17,10 +22,23 @@ export class TunnelManager {
   private config: ServerConfig | null = null;
   private current: Tunnel[] = [];
   private store: DataStore;
+  private reconnect: ReconnectController | null = null;
+  /** 手动连接 / 自动重启过程中置位，避免旧 frpc 进程退出回调误触发恢复。 */
+  private restarting = false;
 
   constructor(store: DataStore, frpcBin: string) { this.store = store; this.frpc = new FrpcProcess(frpcBin); }
   async load() { await this.store.init(); const config = await this.store.config(); this.config = config ? this.normalizedConfig(config) : null; this.current = await this.store.tunnels(); }
-  status() { return { configured: !!this.config, running: this.frpc.running(), connected: this.frpc.isConnected(), pid: 0 }; }
+  status() {
+    const reconnectState = this.reconnect?.currentState();
+    return {
+      configured: !!this.config,
+      running: this.frpc.running(),
+      connected: this.frpc.isConnected(),
+      reconnecting: reconnectState === "reconnecting",
+      reconnectFailed: reconnectState === "failed",
+      pid: 0,
+    };
+  }
   logs() { return this.events; }
   clearLogs() { this.events = []; }
   tunnels() { return this.current.map(tunnel => ({ ...tunnel, route: routeText(tunnel, this.config || {}) })); }
@@ -50,23 +68,34 @@ export class TunnelManager {
       authToken: input.authToken || previous?.authToken || "",
       adminPassword: input.adminPassword || previous?.adminPassword || "",
     } as ServerConfig);
+    const wasArmed = !!this.reconnect;
     this.config = config;
     await this.store.saveConfig(config);
     await writeFile(join(this.store.dir, "frpc.toml"), generateFrpcToml(config, this.store.dir), { mode: 0o600 });
+    // 重连参数可能已修改：已启用的 watchdog 用新参数重建。
+    if (wasArmed) { this.reconnect.stop(); this.reconnect = null; this.armReconnect(); }
     this.log("服务器配置已保存");
   }
 
   async start() {
     if (!this.config) throw new Error("未配置服务器");
     this.log("正在启动隧道管理器...");
-    this.frpc.start(join(this.store.dir, "frpc.toml"), line => this.log(`frpc: ${line}`), code => this.log(`frpc 进程已退出，状态码: ${code}`, "error"));
-    await this.waitForAdmin();
-    await this.waitForServerLogin();
-    await this.syncProxies();
-    this.log("隧道管理器已连接");
+    this.restarting = true;
+    try {
+      await this.startFrpc();
+      this.log("隧道管理器已连接");
+    } finally {
+      // 即使启动失败也启用 watchdog：frpc 可能仍在后台尝试登录，交给它接管恢复。
+      this.restarting = false;
+      this.armReconnect();
+    }
   }
 
-  stop() { this.frpc.stop(); this.log("隧道管理器已停止"); }
+  stop() {
+    this.disarmReconnect();
+    this.frpc.stop();
+    this.log("隧道管理器已停止");
+  }
   async saveTunnels(tunnels: Tunnel[]) { this.current = tunnels; await this.store.saveTunnels(tunnels); if (this.frpc.running()) await this.syncProxies(); }
 
   async createTunnel(input: TunnelInput): Promise<Tunnel> {
@@ -153,8 +182,56 @@ export class TunnelManager {
       ...config,
       vhostHTTPPort: validPort(config.vhostHTTPPort) ? config.vhostHTTPPort : 8080,
       vhostHTTPSPort: validPort(config.vhostHTTPSPort) ? config.vhostHTTPSPort : 8443,
+      reconnectInterval: clampInt(config.reconnectInterval, 3, 300, 10),
+      maxReconnectAttempts: clampInt(config.maxReconnectAttempts, 1, 30, 3),
+      maxRestartAttempts: clampInt(config.maxRestartAttempts, 1, 30, 3),
     };
   }
+
+  private async startFrpc() {
+    this.frpc.start(join(this.store.dir, "frpc.toml"),
+      line => this.log(`frpc: ${line}`),
+      code => {
+        this.log(`frpc 进程已退出，状态码: ${code}`, "error");
+        // 手动连接 / 自动重启过程中的退出由重启路径处理，不额外触发恢复。
+        if (this.reconnect && !this.restarting) this.reconnect.kick();
+      });
+    await this.waitForAdmin();
+    await this.waitForServerLogin();
+    await this.syncProxies();
+  }
+
+  private armReconnect() {
+    const config = this.config;
+    if (!config) return;
+    this.reconnect?.stop();
+    this.reconnect = new ReconnectController({
+      reconnectIntervalMs: (config.reconnectInterval ?? 10) * 1000,
+      maxReconnectAttempts: config.maxReconnectAttempts ?? 3,
+      maxRestartAttempts: config.maxRestartAttempts ?? 3,
+      probe: () => ({ alive: this.frpc.running(), connected: this.frpc.isConnected() }),
+      restart: async () => {
+        this.restarting = true;
+        try {
+          await this.startFrpc();
+          return true;
+        } catch (error) {
+          this.log(`frpc 重启失败: ${error instanceof Error ? error.message : String(error)}`, "error");
+          return false;
+        } finally {
+          this.restarting = false;
+        }
+      },
+      onLog: (message, level) => this.log(message, level),
+    });
+    this.reconnect.start();
+  }
+
+  private disarmReconnect() {
+    this.reconnect?.stop();
+    this.reconnect = null;
+  }
+
   private async admin(path: string, init: RequestInit = {}) {
     const response = await fetch(`http://127.0.0.1:${this.config!.adminPort}${path}`, { ...init, signal: AbortSignal.timeout(3_000), headers: { Authorization: this.auth(), "content-type": "application/json", ...(init.headers || {}) } });
     if (!response.ok) throw new Error(`frpc Admin API ${init.method || "GET"} ${path} failed: ${response.status}`);

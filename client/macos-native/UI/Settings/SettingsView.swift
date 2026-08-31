@@ -17,6 +17,9 @@ struct SettingsView: View {
     @State private var showToken = false
     @State private var menuBarIconStyle: MenuBarIconStyle = .portal
     @State private var remoteReachabilityInterval: Double = 60
+    @State private var reconnectInterval: Double = 10
+    @State private var maxReconnectAttempts: Int = 3
+    @State private var maxRestartAttempts: Int = 3
     @State private var saveError: String?
     @State private var testMessage: String?
     @State private var testSucceeded = false
@@ -224,6 +227,48 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            settingsRow("重连间隔") {
+                Stepper(value: $reconnectInterval, in: 3...300, step: 1) {
+                    Text("\(Int(reconnectInterval)) 秒")
+                        .frame(width: 68, alignment: .leading)
+                }
+                .onChange(of: reconnectInterval) { newValue in
+                    updateReconnectInterval(newValue)
+                }
+
+                Text("断连后每间隔多少秒探测一次连接，也是两次重启之间的最小间隔。")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            settingsRow("最大重连次数") {
+                Stepper(value: $maxReconnectAttempts, in: 1...30, step: 1) {
+                    Text("\(maxReconnectAttempts) 次")
+                        .frame(width: 68, alignment: .leading)
+                }
+                .onChange(of: maxReconnectAttempts) { newValue in
+                    updateMaxReconnectAttempts(newValue)
+                }
+
+                Text("重建连接连续失败 N 次后重启 frpc。")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            settingsRow("最大重启次数") {
+                Stepper(value: $maxRestartAttempts, in: 1...30, step: 1) {
+                    Text("\(maxRestartAttempts) 次")
+                        .frame(width: 68, alignment: .leading)
+                }
+                .onChange(of: maxRestartAttempts) { newValue in
+                    updateMaxRestartAttempts(newValue)
+                }
+
+                Text("重启连续失败 N 次后停止自动恢复，需手动点\"连接\"重试。")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 
@@ -307,6 +352,9 @@ struct SettingsView: View {
         launchAtLogin = AutoStartManager.isEnabled
         menuBarIconStyle = manager.appSettings.menuBarIconStyle
         remoteReachabilityInterval = min(max(manager.appSettings.remoteReachabilityInterval, 30), 600)
+        reconnectInterval = min(max(manager.appSettings.reconnectInterval, 3), 300)
+        maxReconnectAttempts = min(max(manager.appSettings.maxReconnectAttempts, 1), 30)
+        maxRestartAttempts = min(max(manager.appSettings.maxRestartAttempts, 1), 30)
     }
 
     private func testConnection() {
@@ -364,6 +412,39 @@ struct SettingsView: View {
             manager.addEvent("远程探测间隔已更新为 \(Int(settings.remoteReachabilityInterval)) 秒")
         } catch {
             manager.addEvent("保存远程探测间隔失败: \(error.localizedDescription)", level: .error)
+        }
+    }
+
+    private func updateReconnectInterval(_ interval: Double) {
+        var settings = manager.appSettings
+        settings.reconnectInterval = min(max(interval, 3), 300)
+        do {
+            try manager.saveAppSettings(settings)
+            manager.addEvent("重连间隔已更新为 \(Int(settings.reconnectInterval)) 秒")
+        } catch {
+            manager.addEvent("保存重连间隔失败: \(error.localizedDescription)", level: .error)
+        }
+    }
+
+    private func updateMaxReconnectAttempts(_ value: Int) {
+        var settings = manager.appSettings
+        settings.maxReconnectAttempts = min(max(value, 1), 30)
+        do {
+            try manager.saveAppSettings(settings)
+            manager.addEvent("最大重连次数已更新为 \(settings.maxReconnectAttempts) 次")
+        } catch {
+            manager.addEvent("保存最大重连次数失败: \(error.localizedDescription)", level: .error)
+        }
+    }
+
+    private func updateMaxRestartAttempts(_ value: Int) {
+        var settings = manager.appSettings
+        settings.maxRestartAttempts = min(max(value, 1), 30)
+        do {
+            try manager.saveAppSettings(settings)
+            manager.addEvent("最大重启次数已更新为 \(settings.maxRestartAttempts) 次")
+        } catch {
+            manager.addEvent("保存最大重启次数失败: \(error.localizedDescription)", level: .error)
         }
     }
 

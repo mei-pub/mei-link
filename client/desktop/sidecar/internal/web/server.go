@@ -120,10 +120,12 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"configured": s.manager.IsConfigured(),
-		"running":    s.manager.IsRunning(),
-		"connected":  s.manager.IsConnected(),
-		"pid":        s.manager.PID(),
+		"configured":     s.manager.IsConfigured(),
+		"running":        s.manager.IsRunning(),
+		"connected":      s.manager.IsConnected(),
+		"reconnecting":   s.manager.IsReconnecting(),
+		"reconnectFailed": s.manager.IsReconnectFailed(),
+		"pid":            s.manager.PID(),
 	})
 }
 

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { cleanFrpcLogLine, isFrpcLoginSuccess } from "./frpc-log.ts";
+import { cleanFrpcLogLine, isFrpcConnectionFailure, isFrpcLoginSuccess } from "./frpc-log.ts";
 
 export class FrpcProcess {
   private child?: ChildProcess;
@@ -23,6 +23,7 @@ export class FrpcProcess {
         pending = lines.pop() || "";
         for (const rawLine of lines) {
           if (isFrpcLoginSuccess(rawLine)) this.connected = true;
+          else if (isFrpcConnectionFailure(rawLine)) this.connected = false;
           const line = cleanFrpcLogLine(rawLine);
           if (line) onLine(line);
         }

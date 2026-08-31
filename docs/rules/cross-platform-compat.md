@@ -61,14 +61,14 @@
 
 ### 2.4 状态机对齐
 - `TunnelStatus` 6 个值 + 中文 displayName + tintColor 必须一致
-- 应用级状态判定顺序：`isConnected` > `isFrpcRunning` > `isConfigured`
+- 应用级状态判定顺序：`isConnected` > `reconnectFailed` > `isReconnecting` > `isFrpcRunning` > `isConfigured`（新增"重连中/重连失败"两态，三端一致）
 - 状态文案逐字对齐（中文）
 
 ### 2.5 frpc 交互模式对齐
 - frpc.toml 生成规则一致（`webServer.addr = 127.0.0.1` / `[store]` 模式 / 0600 权限）
 - Store API 调用路径一致（`/api/store/proxies` POST/PUT/DELETE + `/api/reload`）
 - Admin API 解码 `convertFromSnakeCase`（Go 端用对应 snake_case tag）
-- 自动恢复策略一致（连续 3 次失败 + 20s 冷却 + sleep 1s + start force）
+- 自动恢复策略一致：可配置两段式（重建连接累计 `maxReconnectAttempts` 次 → 重启 frpc；重启失败累计 `maxRestartAttempts` 次 → 放弃"重连失败"），间隔 `reconnectInterval`；三端默认值 10s / 3 / 3，设置项同名同 clamp。详见 [modifying-status-polling.md](./modifying-status-polling.md)
 
 ### 2.6 UI 不变量对齐
 - 窗口尺寸：见 [../sdd/04-ui-design.md](../sdd/04-ui-design.md) §1

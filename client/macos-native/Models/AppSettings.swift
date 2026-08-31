@@ -37,6 +37,12 @@ struct AppSettings: Codable, Sendable {
     var statusPollingInterval: TimeInterval
     var remoteReachabilityInterval: TimeInterval
     var menuBarIconStyle: MenuBarIconStyle
+    /// 自动重连：断连后每次探测/等待的间隔（秒）。默认 10，clamp [3, 300]。
+    var reconnectInterval: TimeInterval
+    /// 自动重连：重建连接连续失败多少次后升级为重启 frpc。默认 3，clamp [1, 30]。
+    var maxReconnectAttempts: Int
+    /// 自动重连：重启 frpc 连续失败多少次后放弃自动恢复。默认 3，clamp [1, 30]。
+    var maxRestartAttempts: Int
 
     init(
         autoStart: Bool = true,
@@ -44,7 +50,10 @@ struct AppSettings: Codable, Sendable {
         showInDock: Bool = false,
         statusPollingInterval: TimeInterval = 3.0,
         remoteReachabilityInterval: TimeInterval = 60.0,
-        menuBarIconStyle: MenuBarIconStyle = .portal
+        menuBarIconStyle: MenuBarIconStyle = .portal,
+        reconnectInterval: TimeInterval = 10.0,
+        maxReconnectAttempts: Int = 3,
+        maxRestartAttempts: Int = 3
     ) {
         self.autoStart = autoStart
         self.launchAtLogin = launchAtLogin
@@ -52,6 +61,9 @@ struct AppSettings: Codable, Sendable {
         self.statusPollingInterval = statusPollingInterval
         self.remoteReachabilityInterval = remoteReachabilityInterval
         self.menuBarIconStyle = menuBarIconStyle
+        self.reconnectInterval = reconnectInterval
+        self.maxReconnectAttempts = maxReconnectAttempts
+        self.maxRestartAttempts = maxRestartAttempts
     }
 
     enum CodingKeys: String, CodingKey {
@@ -61,6 +73,9 @@ struct AppSettings: Codable, Sendable {
         case statusPollingInterval
         case remoteReachabilityInterval
         case menuBarIconStyle
+        case reconnectInterval
+        case maxReconnectAttempts
+        case maxRestartAttempts
     }
 
     init(from decoder: Decoder) throws {
@@ -71,6 +86,9 @@ struct AppSettings: Codable, Sendable {
         statusPollingInterval = try container.decodeIfPresent(TimeInterval.self, forKey: .statusPollingInterval) ?? 3.0
         remoteReachabilityInterval = try container.decodeIfPresent(TimeInterval.self, forKey: .remoteReachabilityInterval) ?? 60.0
         menuBarIconStyle = try container.decodeIfPresent(MenuBarIconStyle.self, forKey: .menuBarIconStyle) ?? .portal
+        reconnectInterval = try container.decodeIfPresent(TimeInterval.self, forKey: .reconnectInterval) ?? 10.0
+        maxReconnectAttempts = try container.decodeIfPresent(Int.self, forKey: .maxReconnectAttempts) ?? 3
+        maxRestartAttempts = try container.decodeIfPresent(Int.self, forKey: .maxRestartAttempts) ?? 3
     }
 }
 

@@ -22,6 +22,9 @@
 ### 1.2 跨平台客户端
 - `client/desktop/sidecar/internal/tunnel/manager.go`
 - `client/desktop/sidecar/internal/frpc/admin_api.go`
+- `client/docker/src/reconnect.ts` — Docker 客户端可配置两段式重连状态机（重建连接 → 重启 frpc → 放弃）
+- `client/docker/src/manager.ts` — watchdog 接线（`armReconnect` / `disarmReconnect` / `startFrpc` 退出回调 kick / 探活 / 重启）
+- `client/docker/src/frpc-log.ts` — `isFrpcConnectionFailure`（匹配 frp v0.70 `connect to server error`）
 
 ### 1.3 SDD 文档
 - [../sdd/03-architecture.md](../sdd/03-architecture.md) §4-§6（状态机 / 连接状态判定 / 自动恢复策略）
@@ -29,19 +32,30 @@
 
 ## 2. 必读不变量
 
-### 2.1 硬编码阈值（不能随意改）
-| 常量 | 值 | 位置 | 说明 |
+### 2.1 恢复阈值（两段式，可配置）
+三端一致的**可配置两段式重连**（macOS 原生 / 桌面 / Docker）：
+- **第 1 段（重建连接）**：断连后 frpc 进程存活时其在后台自行重连，客户端按 `reconnectInterval` 周期探测计数（`consecutiveFailures`），连续失败达到 `maxReconnectAttempts`（默认 3）→ `recoverConnection`（重启）
+- **第 2 段（重启 frpc）**：重启失败累计 `restartFailures` 达到 `maxRestartAttempts`（默认 3）→ 放弃（`reconnectFailed`），需手动"连接"或等连接自行恢复后自动解除
+- 进程意外退出（`onTermination` 非 0 且非主动）直接进重启（sleep 2s 防抖）；手动"断开"不触发恢复
+- 重启最小间隔 = `reconnectInterval`（替代原 20s 冷却）；被间隔挡下时**只重排轮询定时器、不做立即探测**（避免探测→拦截级联）
+- 断连期间轮询间隔改用 `reconnectInterval`；健康时用 `statusPollingInterval`
+
+| 参数 | 默认 | clamp | 位置 |
 |---|---|---|---|
-| `maxConsecutiveFailuresBeforeRecovery` | 3 | `TunnelManager` | 连续 3 次失败才触发恢复 |
-| `recoveryCooldown` | 20 秒 | `TunnelManager` | 距上次恢复不足 20s 跳过 |
-| `statusPollingInterval` clamp | [3, 30] | `startStatusPolling` | 即使设置成 1 也按 3 跑 |
-| `remoteReachabilityInterval` clamp | [30, 600] | `shouldProbeReachability` | 设置范围外会被 clamp |
-| frpc 异常退出后 sleep | 2 秒 | `FrpcProcess.onTermination` | 防抖 |
-| 恢复前 sleep | 1 秒 | `recoverConnection` | 给进程退出留时间 |
-| `waitForAdminAPI` 超时 | 5 秒 | `start()` | 启动路径 |
-| `waitForAdminAPIAsync` 超时 | 15 秒 | `restart()` | 重启路径 |
-| 探活 TCP 超时 | 4 秒 | `TunnelReachabilityProbe` | NWConnection 超时 |
-| Admin API 请求超时 | 10 秒 | `FrpcAdminAPI` | `URLSessionConfiguration.timeoutIntervalForRequest` |
+| `reconnectInterval` | 10s | [3, 300] | `AppSettings` / Go `AppSettings` / docker `ServerConfig` |
+| `maxReconnectAttempts` | 3 | [1, 30] | 同上（Swift `recordConnectivityFailure` / Go `recordConnectivityFailure` / docker `ReconnectController`） |
+| `maxRestartAttempts` | 3 | [1, 30] | 同上（Swift/Go `recoverConnection` / docker `ReconnectController`） |
+| `statusPollingInterval` clamp | 3.0 | [3, 30] | `startStatusPolling` |
+| `remoteReachabilityInterval` clamp | 60.0 | [30, 600] | `shouldProbeReachability` |
+| frpc 异常退出后 sleep | 2 秒 | — | `FrpcProcess.onTermination` |
+| 恢复前 sleep | 1 秒 | — | `recoverConnection` |
+| `waitForAdminAPI` 超时 | 5 秒 | — | `start()` |
+| `waitForAdminAPIAsync` 超时 | 15 秒 | — | `restart()` |
+| 探活 TCP 超时 | 4 秒 | — | `TunnelReachabilityProbe` |
+| Admin API 请求超时 | 10 秒 | — | `FrpcAdminAPI` |
+
+> 三端默认值一致（10 / 3 / 3）。Docker 端实现为独立状态机 `client/docker/src/reconnect.ts`
+> （先验证），Swift / Go 端逻辑见 `recoverConnection` / `recordConnectivityFailure`。
 
 ### 2.2 重入保护标志
 - `isPollingStatus`：`pollStatus` 重入直接 return
@@ -71,32 +85,36 @@
 **不能对 UDP 强行探活**，TCP 探活 UDP 端口永远失败，会触发误恢复。
 
 ### 2.5 恢复路径两条
-1. **轮询触发**：`pollStatus` 失败累计 3 次 → `recoverConnection`
-2. **进程退出触发**：`FrpcProcess.onTermination` 非 0 退出 → sleep 2s → `recoverConnection`
+1. **轮询触发**：`pollStatus` 失败累计 `maxReconnectAttempts` 次 → `recoverConnection`
+2. **进程退出触发**：`FrpcProcess.onTermination` 非 0 且非主动退出 → sleep 2s → `recoverConnection`（进程已死，"重建连接"无意义，直接重启）
 
-两条路径都受 `isRecovering` + `recoveryCooldown` 保护。
+两条路径都受 `isRecovering` 重入保护 + `reconnectInterval` 重启最小间隔保护。
+若已 `reconnectFailed`（放弃），两条路径都不再触发恢复。
 
 ### 2.6 恢复流程
 `recoverConnection` 的顺序不能变：
 
 1. 检查 `isRecovering`（重入保护）
-2. 检查 `recoveryCooldown`（20s 冷却）
-3. `isRecovering = true` + `lastRecoveryAt = Date()`
-4. 记 warning 日志
-5. 停 `statusTimer`
-6. `frpcProcess.stopImmediately()`
-7. `isFrpcRunning = false` + `isConnected = false`
-8. sleep 1s
-9. `consecutiveFailures = 0`
-10. `start(force: true)`
-11. `isRecovering = false`
+2. 检查 `reconnectFailed`（已放弃则不再恢复）
+3. 检查重启最小间隔（距上次重启 < `reconnectInterval` → 只 `startStatusPolling(immediatePoll: false)` 重排轮询后返回）
+4. `isRecovering = true` + `lastRestartAt = Date()`
+5. 记 warning 日志
+6. 停 `statusTimer`
+7. `frpcProcess.stopImmediately()`
+8. `isFrpcRunning = false` + `isConnected = false`
+9. sleep 1s
+10. `consecutiveFailures = 0` + `restartFailures += 1`
+11. `start(force: true)`（Swift 返回 Bool；Go `Start()` 返回 error）
+    - 成功 → `restartFailures = 0` + 记"frpc 重启成功"
+    - 失败 → 记"第 N/maxRestartAttempts 次重启失败"；`restartFailures >= maxRestartAttempts` → `reconnectFailed = true` + `isReconnecting = false` + 记"自动重连已放弃"；随后 `startStatusPolling()` 保持轮询
+12. `isRecovering = false`
 
 ## 3. 同步修改清单
 
 ### 3.1 改阈值
-- [ ] `TunnelManager.swift`：改常量值
-- [ ] 跨平台：`manager.go` 同步
-- [ ] SDD：`03-architecture.md` §3.3 / `06-constraints.md` §4.3 同步
+- [ ] `AppSettings.swift` / Go `config.go` / docker `config.ts`：改默认值（三端一致：`reconnectInterval` 10 / `maxReconnectAttempts` 3 / `maxRestartAttempts` 3）
+- [ ] 三端使用点 clamp（Swift `TunnelManager` / Go `manager.go` / docker `normalizedConfig`）
+- [ ] SDD：`03-architecture.md` §6 / `06-constraints.md` §4.3 同步
 
 ### 3.2 改轮询间隔
 - [ ] `AppSettings.swift`：改 `statusPollingInterval` / `remoteReachabilityInterval` 默认值
@@ -113,11 +131,12 @@
 - [ ] SDD：`03-architecture.md` §3.9 / `06-constraints.md` §4.2 同步
 
 ### 3.4 改恢复策略
-- [ ] `TunnelManager.swift`：`recoverConnection` / `recordConnectivityFailure`
-- [ ] 不能去掉 `isRecovering` / `recoveryCooldown` 保护
+- [ ] `TunnelManager.swift` / Go `manager.go` / docker `reconnect.ts`：`recoverConnection` / `recordConnectivityFailure`（三端逻辑一致）
+- [ ] 不能去掉 `isRecovering` 重入保护
 - [ ] 不能去掉 sleep 1s（frpc 退出需要时间）
-- [ ] 跨平台：`manager.go` 同步
-- [ ] SDD：`03-architecture.md` §6 同步
+- [ ] 被 `reconnectInterval` 最小间隔挡下时**只重排轮询、不做立即探测**（`startStatusPolling(immediatePoll: false)` / `startStatusPollingWithPoll(false)`），避免探测→拦截级联
+- [ ] 新增/修改"重连中/重连失败"状态发布（Swift `@Published` / Go getter + `/api/status` / docker `/api/status`）
+- [ ] SDD：`03-architecture.md` §6 / `06-constraints.md` §4.3 + §5 同步
 
 ### 3.5 改 frpc 退出回调
 - [ ] `FrpcProcess.swift`：`onTermination` 回调
@@ -166,21 +185,31 @@ case .udp:
     return .skipped
 ```
 
-### 4.4 反例：恢复不加冷却
+### 4.4 反例：恢复不计数 / 不设间隔
 ```swift
-// ❌ 错误：每次失败都恢复，会陷入恢复风暴
+// ❌ 错误：每次失败都恢复，或重启失败不计数，会陷入恢复风暴
 private func recordConnectivityFailure(reason: String) async {
     consecutiveFailures += 1
-    await recoverConnection(reason: reason)  // 没 cooldown
+    await recoverConnection(reason: reason)  // 无阈值、无重启失败计数
 }
 
-// ✅ 正确：累计 3 次且过冷却才恢复
-guard consecutiveFailures >= maxConsecutiveFailuresBeforeRecovery else { return }
-if let lastRecoveryAt, Date().timeIntervalSince(lastRecoveryAt) < recoveryCooldown { return }
+// ✅ 正确：累计 maxReconnectAttempts 次才重启；重启失败累计 maxRestartAttempts 次后放弃
+guard consecutiveFailures >= maxReconnectAttempts else { return }
 await recoverConnection(reason: reason)
+// recoverConnection 内：restartFailures += 1；>= maxRestartAttempts → reconnectFailed = true
 ```
 
-### 4.5 反例：恢复不 sleep
+### 4.5 反例：重启间隔拦截分支做立即探测
+```swift
+// ❌ 错误：被 reconnectInterval 最小间隔挡下时 startStatusPolling() 会立即探测，
+// 探测又触发恢复→拦截→再探测……形成快速级联
+if withinReconnectInterval { startStatusPolling(); return }
+
+// ✅ 正确：只重排定时器，不做立即探测，等定时器自然触发
+if withinReconnectInterval { startStatusPolling(immediatePoll: false); return }
+```
+
+### 4.6 反例：恢复不 sleep
 ```swift
 // ❌ 错误：stopImmediately 后立即 start，frpc 端口可能还没释放
 frpcProcess.stopImmediately()
@@ -194,11 +223,12 @@ await start(force: true)
 
 ## 5. 验证步骤
 
-1. `swift build` 编译通过
+1. `swift build` 编译通过 / `go test ./...` / docker `npm test` 通过
 2. 启动应用 + 配置 + 添加隧道 → 状态轮询正常，`isConnected` 变 true
-3. 手动 kill frpc 进程（`pkill -f frpc`）→ 2s 后自动恢复，日志显示"连接连续异常，正在自动重连"
-4. 拔网线 / 改 hosts 让外网不可达 → 3 次失败后触发恢复
-5. 30s 内连续 kill frpc 多次 → 只触发一次恢复（冷却生效）
-6. 短时间内多次重启 → 不出现恢复风暴
-7. UDP 隧道不会被探活（不会被标 checkFailed）
-8. 跨平台客户端行为一致
+3. 手动 kill frpc 进程（`pkill -f frpc`）→ 2s 后自动重启，日志显示"正在重启 frpc"，状态短暂进入"重连中"后恢复"已连接"
+4. 拔网线 / 改 hosts 让外网不可达 → `maxReconnectAttempts` 次失败后触发重启
+5. 服务器持续不可达 → 重启失败累计 `maxRestartAttempts` 次 → 状态"重连失败"，日志显示"自动重连已放弃"
+6. 手动点"连接" → 清除"重连失败"，恢复正常轮询
+7. 重启失败后立即再次 kill frpc → 被 `reconnectInterval` 最小间隔挡下，不出现快速重启风暴
+8. UDP 隧道不会被探活（不会被标 checkFailed）
+9. 三端（macOS 原生 / 桌面 / Docker）行为一致：阈值默认值、状态文案、放弃机制

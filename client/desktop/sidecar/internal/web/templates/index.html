@@ -98,6 +98,9 @@ select.form-input{cursor:pointer}
 <div class="grid-2">
 <div class="form-group"><label>状态轮询间隔（秒，3-30）</label><input class="form-input" id="setPoll" type="number" step="1" min="3" max="30"></div>
 <div class="form-group"><label>远程探活间隔（秒，30-600）</label><input class="form-input" id="setProbe" type="number" step="10" min="30" max="600"></div>
+<div class="form-group"><label>重连间隔（秒，3-300）</label><input class="form-input" id="setReconnect" type="number" step="1" min="3" max="300"></div>
+<div class="form-group"><label>最大重连次数（1-30）</label><input class="form-input" id="setMaxReconnect" type="number" step="1" min="1" max="30"></div>
+<div class="form-group"><label>最大重启次数（1-30）</label><input class="form-input" id="setMaxRestart" type="number" step="1" min="1" max="30"></div>
 </div>
 <div style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="saveSettings()">保存设置</button></div>
 </div>
@@ -151,7 +154,8 @@ async function api(path,opts={}){const res=await fetch(path,{headers:{"Content-T
 async function loadStatus(){try{const d=await api("/api/status");const b=document.getElementById("globalStatus");const t=document.getElementById("statusText");
 if(!d.configured){b.className="status-badge stopped";t.textContent="未配置"}
 else if(d.connected){b.className="status-badge connected";t.textContent="已连接"}
-else if(d.running){b.className="status-badge connecting";t.textContent="连接中"}
+else if(d.reconnectFailed){b.className="status-badge stopped";t.textContent="重连失败"}
+else if(d.reconnecting||d.running){b.className="status-badge connecting";t.textContent=d.reconnecting?"重连中":"连接中"}
 else{b.className="status-badge stopped";t.textContent="未运行"}
 document.getElementById("ctrlStart").disabled=d.running;
 document.getElementById("ctrlStop").disabled=!d.running;
@@ -182,9 +186,9 @@ if(!ev.length){el.innerHTML='<div class="empty-state">暂无事件</div>';return
 el.innerHTML=ev.map(e=>{const tm=new Date(e.timestamp).toLocaleTimeString();
 return `<div class="event-item"><span class="event-time">${tm}</span><span class="event-${e.level||"info"}">${esc(e.message)}</span></div>`}).join("")}catch{}}
 
-async function loadSettings(){try{const s=await api("/api/settings");document.getElementById("setPoll").value=s.status_polling_interval||3;document.getElementById("setProbe").value=s.remote_reachability_interval||60}catch{}}
+async function loadSettings(){try{const s=await api("/api/settings");document.getElementById("setPoll").value=s.statusPollingInterval||3;document.getElementById("setProbe").value=s.remoteReachabilityInterval||60;document.getElementById("setReconnect").value=s.reconnectInterval||10;document.getElementById("setMaxReconnect").value=s.maxReconnectAttempts||3;document.getElementById("setMaxRestart").value=s.maxRestartAttempts||3}catch{}}
 
-async function saveSettings(){const s={auto_start:true,status_polling_interval:parseFloat(document.getElementById("setPoll").value),remote_reachability_interval:parseFloat(document.getElementById("setProbe").value)};try{await api("/api/settings",{method:"POST",body:s});alert("设置已保存")}catch(e){alert("保存失败: "+e.message)}}
+async function saveSettings(){const s={autoStart:true,statusPollingInterval:parseFloat(document.getElementById("setPoll").value),remoteReachabilityInterval:parseFloat(document.getElementById("setProbe").value),reconnectInterval:parseFloat(document.getElementById("setReconnect").value),maxReconnectAttempts:parseInt(document.getElementById("setMaxReconnect").value),maxRestartAttempts:parseInt(document.getElementById("setMaxRestart").value)};try{await api("/api/settings",{method:"POST",body:s});alert("设置已保存")}catch(e){alert("保存失败: "+e.message)}}
 
 async function control(act){try{await api("/api/control/"+act,{method:"POST"});loadStatus()}catch(e){alert("操作失败: "+e.message)}}
 

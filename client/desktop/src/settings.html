@@ -64,6 +64,9 @@
       <div class="setting-row"><div><label>菜单栏图标</label><div class="desc">选择菜单栏图标的样式。</div></div></div>
       <div class="icon-grid" id="iconGrid"></div>
       <div class="setting-row" style="margin-top:6px"><div><label>远程探测间隔</label><div class="desc">降低外部端口探测频率。</div></div><div style="display:flex;align-items:center;gap:6px"><button class="btn btn-sm" id="probeDown" aria-label="减少远程探测间隔" title="减少远程探测间隔">−</button><span id="probeVal">60 秒</span><button class="btn btn-sm" id="probeUp" aria-label="增加远程探测间隔" title="增加远程探测间隔">+</button></div></div>
+      <div class="setting-row" style="margin-top:6px"><div><label>重连间隔</label><div class="desc">断连后的探测间隔，也是两次重启的最小间隔。</div></div><div style="display:flex;align-items:center;gap:6px"><button class="btn btn-sm" id="reconnectDown" aria-label="减少重连间隔" title="减少重连间隔">−</button><span id="reconnectVal">10 秒</span><button class="btn btn-sm" id="reconnectUp" aria-label="增加重连间隔" title="增加重连间隔">+</button></div></div>
+      <div class="setting-row"><div><label>最大重连次数</label><div class="desc">重建连接连续失败 N 次后重启 frpc。</div></div><div style="display:flex;align-items:center;gap:6px"><button class="btn btn-sm" id="reconnectAttemptsDown" aria-label="减少最大重连次数" title="减少最大重连次数">−</button><span id="reconnectAttemptsVal">3 次</span><button class="btn btn-sm" id="reconnectAttemptsUp" aria-label="增加最大重连次数" title="增加最大重连次数">+</button></div></div>
+      <div class="setting-row"><div><label>最大重启次数</label><div class="desc">重启连续失败 N 次后停止自动恢复。</div></div><div style="display:flex;align-items:center;gap:6px"><button class="btn btn-sm" id="restartAttemptsDown" aria-label="减少最大重启次数" title="减少最大重启次数">−</button><span id="restartAttemptsVal">3 次</span><button class="btn btn-sm" id="restartAttemptsUp" aria-label="增加最大重启次数" title="增加最大重启次数">+</button></div></div>
     </div>
   </div>
   <div class="footer">
@@ -83,6 +86,9 @@ const ICON_NAMES = ["portal", "topology", "arrowRing", "waveform", "relay"];
 const ICON_LABELS = ["门户", "拓扑", "穿透", "信号", "中继"];
 const ICON_FILES = { portal: "portal", topology: "topology", arrowRing: "arrow-ring", waveform: "waveform", relay: "relay" };
 let probeInterval = 60;
+let reconnectInterval = 10;
+let maxReconnectAttempts = 3;
+let maxRestartAttempts = 3;
 let selectedIcon = "portal";
 let saveBusy = false;
 
@@ -128,6 +134,12 @@ document.getElementById("testBtn").onclick = async () => {
 };
 document.getElementById("probeDown").onclick = () => { probeInterval = Math.max(30, probeInterval - 15); document.getElementById("probeVal").textContent = `${probeInterval} 秒`; };
 document.getElementById("probeUp").onclick = () => { probeInterval = Math.min(600, probeInterval + 15); document.getElementById("probeVal").textContent = `${probeInterval} 秒`; };
+document.getElementById("reconnectDown").onclick = () => { reconnectInterval = Math.max(3, reconnectInterval - 1); document.getElementById("reconnectVal").textContent = `${reconnectInterval} 秒`; };
+document.getElementById("reconnectUp").onclick = () => { reconnectInterval = Math.min(300, reconnectInterval + 1); document.getElementById("reconnectVal").textContent = `${reconnectInterval} 秒`; };
+document.getElementById("reconnectAttemptsDown").onclick = () => { maxReconnectAttempts = Math.max(1, maxReconnectAttempts - 1); document.getElementById("reconnectAttemptsVal").textContent = `${maxReconnectAttempts} 次`; };
+document.getElementById("reconnectAttemptsUp").onclick = () => { maxReconnectAttempts = Math.min(30, maxReconnectAttempts + 1); document.getElementById("reconnectAttemptsVal").textContent = `${maxReconnectAttempts} 次`; };
+document.getElementById("restartAttemptsDown").onclick = () => { maxRestartAttempts = Math.max(1, maxRestartAttempts - 1); document.getElementById("restartAttemptsVal").textContent = `${maxRestartAttempts} 次`; };
+document.getElementById("restartAttemptsUp").onclick = () => { maxRestartAttempts = Math.min(30, maxRestartAttempts + 1); document.getElementById("restartAttemptsVal").textContent = `${maxRestartAttempts} 次`; };
 document.getElementById("autostartToggle").onchange = async (e) => {
   const enabled = e.target.checked;
   try {
@@ -188,6 +200,9 @@ async function save(restart) {
       statusPollingInterval: current.statusPollingInterval || 3,
       remoteReachabilityInterval: probeInterval,
       menuBarIconStyle: selectedIcon,
+      reconnectInterval,
+      maxReconnectAttempts,
+      maxRestartAttempts,
     });
     await setTrayIconStyle(selectedIcon);
     if (restart) {
@@ -214,8 +229,8 @@ async function refresh() {
   try {
     const status = await api.getStatus().catch(() => null);
     if (status) {
-      document.getElementById("hdrStatus").textContent = status.connected ? "已连接" : status.running ? "连接中" : status.configured ? "未连接" : "未配置";
-      document.getElementById("hdrDot").className = "status-dot " + (status.connected?"running":status.running?"connecting":"stopped");
+      document.getElementById("hdrStatus").textContent = status.connected ? "已连接" : status.reconnectFailed ? "重连失败" : status.reconnecting || status.running ? (status.reconnecting ? "重连中" : "连接中") : status.configured ? "未连接" : "未配置";
+      document.getElementById("hdrDot").className = "status-dot " + (status.connected ? "running" : status.reconnectFailed ? "error" : status.reconnecting || status.running ? "connecting" : "stopped");
     }
   } catch(e) { console.error("status load failed:", e); }
 
@@ -239,6 +254,12 @@ async function refresh() {
     if (settings) {
       probeInterval = settings.remoteReachabilityInterval || 60;
       document.getElementById("probeVal").textContent = `${probeInterval} 秒`;
+      reconnectInterval = settings.reconnectInterval || 10;
+      document.getElementById("reconnectVal").textContent = `${reconnectInterval} 秒`;
+      maxReconnectAttempts = settings.maxReconnectAttempts || 3;
+      document.getElementById("reconnectAttemptsVal").textContent = `${maxReconnectAttempts} 次`;
+      maxRestartAttempts = settings.maxRestartAttempts || 3;
+      document.getElementById("restartAttemptsVal").textContent = `${maxRestartAttempts} 次`;
       if (settings.menuBarIconStyle) {
         selectedIcon = settings.menuBarIconStyle;
         iconGrid.querySelectorAll(".icon-option").forEach(el => {

@@ -10,6 +10,8 @@ class TunnelManager: ObservableObject {
     @Published var events: [EventLog] = []
     @Published var isConfigured = false
     @Published var appSettings = AppSettings()
+    @Published var isReconnecting = false
+    @Published var reconnectFailed = false
 
     private let frpcProcess = FrpcProcess()
     private var adminAPI: FrpcAdminAPI?
@@ -20,11 +22,16 @@ class TunnelManager: ObservableObject {
     private var isPollingStatus = false
     private var isRecovering = false
     private var consecutiveFailures = 0
-    private var lastRecoveryAt: Date?
     private var lastReachabilityProbeAt: Date?
+    /// 重启 frpc 的失败次数（连续），达到 maxRestartAttempts 后放弃自动恢复。
+    private var restartFailures = 0
+    /// 最近一次重启时间，用于限制重启最小间隔。
+    private var lastRestartAt: Date?
 
-    private let maxConsecutiveFailuresBeforeRecovery = 3
-    private let recoveryCooldown: TimeInterval = 20
+    // 两段式重连阈值（替代原硬编码 3 次失败 / 20 秒冷却），均来自可配置设置并在使用点 clamp。
+    private var maxReconnectAttempts: Int { min(max(appSettings.maxReconnectAttempts, 1), 30) }
+    private var maxRestartAttempts: Int { min(max(appSettings.maxRestartAttempts, 1), 30) }
+    private var reconnectInterval: TimeInterval { min(max(appSettings.reconnectInterval, 3), 300) }
 
     private let logger = Logger(subsystem: "pub.mei.meilink", category: "TunnelManager")
 
@@ -51,6 +58,7 @@ class TunnelManager: ObservableObject {
 
             // 自动重启：仅当 frpc 真正异常退出（非主动停止且状态码非 0）时才尝试重启
             if isCrash {
+                if !self.reconnectFailed { self.isReconnecting = true }
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                     await self.recoverConnection(reason: "frpc 异常退出，正在自动重启")
@@ -82,6 +90,8 @@ class TunnelManager: ObservableObject {
     func saveAppSettings(_ settings: AppSettings) throws {
         try store.saveSettings(settings)
         appSettings = settings
+        // 重连参数可能已修改：轮询在跑时用新参数重排定时器。
+        rescheduleStatusPollingIfNeeded()
     }
 
     func rebuildMenuBarIcon() {
@@ -97,12 +107,16 @@ class TunnelManager: ObservableObject {
     }
 
     func start() async {
-        await start(force: false)
+        // 手动连接视为重新开始：清除"重连失败/重连中"状态。
+        resetReconnectState()
+        _ = await start(force: false)
     }
 
-    private func start(force: Bool) async {
+    /// 启动 frpc 并等待就绪。返回是否完成启动序列（Admin API 就绪）；
+    /// 连接是否真正建立由后续轮询判定。
+    private func start(force: Bool) async -> Bool {
         if isFrpcRunning, frpcProcess.isRunning, !force {
-            return
+            return true
         }
 
         if !frpcProcess.isRunning {
@@ -112,7 +126,7 @@ class TunnelManager: ObservableObject {
 
         guard let config = serverConfig else {
             addEvent("未配置服务器", level: .error)
-            return
+            return false
         }
 
         addEvent("正在启动隧道管理器...")
@@ -125,7 +139,7 @@ class TunnelManager: ObservableObject {
             isConnected = false
         } catch {
             addEvent("启动 frpc 失败: \(error.localizedDescription)", level: .error)
-            return
+            return false
         }
 
         adminAPI = FrpcAdminAPI(
@@ -141,7 +155,7 @@ class TunnelManager: ObservableObject {
             frpcProcess.stopImmediately()
             isFrpcRunning = false
             isConnected = false
-            return
+            return false
         }
 
         var restoredProxy = false
@@ -171,6 +185,7 @@ class TunnelManager: ObservableObject {
 
         startStatusPolling()
         addEvent("隧道管理器已启动，正在检测外部可达性")
+        return true
     }
 
     func startIfNeeded() async {
@@ -183,6 +198,7 @@ class TunnelManager: ObservableObject {
         statusTimer?.invalidate()
         statusTimer = nil
 
+        resetReconnectState()
         frpcProcess.stop()
         isFrpcRunning = false
         isConnected = false
@@ -198,9 +214,19 @@ class TunnelManager: ObservableObject {
         statusTimer?.invalidate()
         statusTimer = nil
 
+        resetReconnectState()
         frpcProcess.stopImmediately()
         isFrpcRunning = false
         isConnected = false
+    }
+
+    /// 手动操作（连接/停止/深度重启）或恢复健康后重置两段式重连状态。
+    private func resetReconnectState() {
+        reconnectFailed = false
+        isReconnecting = false
+        restartFailures = 0
+        consecutiveFailures = 0
+        lastRestartAt = nil
     }
 
     /// 强制终止 frpc 进程（应用退出时调用，确保 frpc 完全退出）
@@ -243,6 +269,7 @@ class TunnelManager: ObservableObject {
     }
 
     func restart() async {
+        resetReconnectState()
         addEvent("开始深度重启...", level: .info)
 
         // 第1层：停止状态轮询
@@ -410,11 +437,14 @@ class TunnelManager: ObservableObject {
 
     // MARK: - Status Polling
 
-    private func startStatusPolling() {
+    /// 已连接时按状态轮询间隔刷新 UI；断连/重连阶段改用重连间隔探测，避免日志与探测过密。
+    private var effectivePollingInterval: TimeInterval {
+        isConnected ? min(max(appSettings.statusPollingInterval, 3), 30) : reconnectInterval
+    }
+
+    private func scheduleStatusTimer(interval: TimeInterval) {
         statusTimer?.invalidate()
-        lastReachabilityProbeAt = nil
-        let pollingInterval = min(max(appSettings.statusPollingInterval, 3), 30)
-        statusTimer = Timer.scheduledTimer(withTimeInterval: pollingInterval, repeats: true) { [weak self] _ in
+        statusTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             // Bind self to a local constant before entering the concurrent Task
             // to avoid "reference to captured var 'self' in concurrently-executing
             // code" under Swift 5.10 release-mode concurrency checking.
@@ -423,9 +453,21 @@ class TunnelManager: ObservableObject {
                 await self.pollStatus()
             }
         }
+    }
+
+    private func startStatusPolling(immediatePoll: Bool = true) {
+        lastReachabilityProbeAt = nil
+        scheduleStatusTimer(interval: effectivePollingInterval)
+        guard immediatePoll else { return }
         Task { @MainActor in
             await pollStatus()
         }
+    }
+
+    /// 阶段切换（健康 ↔ 断连）后按新间隔重排定时器；定时器未在跑时不动。
+    private func rescheduleStatusPollingIfNeeded() {
+        guard statusTimer != nil else { return }
+        scheduleStatusTimer(interval: effectivePollingInterval)
     }
 
     private func pollStatus() async {
@@ -479,8 +521,16 @@ class TunnelManager: ObservableObject {
             }
 
             consecutiveFailures = 0
+            restartFailures = 0
             isFrpcRunning = true
+            let wasConnected = isConnected
             isConnected = true
+            if !wasConnected {
+                // 恢复健康：解除"重连中/重连失败"，并按状态轮询间隔重排定时器。
+                isReconnecting = false
+                reconnectFailed = false
+                rescheduleStatusPollingIfNeeded()
+            }
         } catch {
             await recordConnectivityFailure(reason: "状态检测失败: \(error.localizedDescription)")
         }
@@ -513,26 +563,38 @@ class TunnelManager: ObservableObject {
     private func recordConnectivityFailure(reason: String) async {
         consecutiveFailures += 1
         isConnected = false
+        if !reconnectFailed { isReconnecting = true }
 
         if consecutiveFailures == 1 {
             addEvent("连接检测失败: \(reason)", level: .warning)
+            rescheduleStatusPollingIfNeeded()
         }
 
-        guard consecutiveFailures >= maxConsecutiveFailuresBeforeRecovery else { return }
+        // 已放弃自动恢复：不再计数升级，等手动干预或连接自行恢复。
+        guard !reconnectFailed else { return }
+        // 第 1 段（重建连接）：frpc 进程存活时其在后台自行重连，这里只累计失败。
+        guard consecutiveFailures >= maxReconnectAttempts else { return }
         await recoverConnection(reason: reason)
     }
 
+    /// 第 2 段（重启 frpc）：重启失败累计 maxRestartAttempts 次后放弃自动恢复。
     private func recoverConnection(reason: String) async {
         guard !isRecovering else { return }
+        guard !reconnectFailed else { return }
 
-        if let lastRecoveryAt,
-           Date().timeIntervalSince(lastRecoveryAt) < recoveryCooldown {
+        // 重启最小间隔：reconnectInterval 内不重复重启（替代原 20s 冷却）。
+        // 被间隔挡下时只重排轮询定时器（不做立即探测，避免探测→拦截的级联），
+        // 由后续探测继续累计失败并再次触发。
+        if let lastRestartAt,
+           Date().timeIntervalSince(lastRestartAt) < reconnectInterval {
+            startStatusPolling(immediatePoll: false)
             return
         }
 
         isRecovering = true
-        lastRecoveryAt = Date()
-        addEvent("连接连续异常，正在自动重连: \(reason)", level: .warning)
+        lastRestartAt = Date()
+        isReconnecting = true
+        addEvent("连接连续异常，正在重启 frpc: \(reason)", level: .warning)
 
         statusTimer?.invalidate()
         statusTimer = nil
@@ -543,7 +605,23 @@ class TunnelManager: ObservableObject {
 
         try? await Task.sleep(nanoseconds: 1_000_000_000)
         consecutiveFailures = 0
-        await start(force: true)
+
+        restartFailures += 1
+        let ok = await start(force: true)
+        if ok {
+            addEvent("frpc 重启成功，连接已恢复", level: .info)
+            restartFailures = 0
+        } else {
+            addEvent("第 \(restartFailures)/\(maxRestartAttempts) 次重启失败", level: .error)
+            if restartFailures >= maxRestartAttempts {
+                reconnectFailed = true
+                isReconnecting = false
+                restartFailures = 0
+                addEvent("自动重连已放弃：重启次数耗尽，请手动重试", level: .error)
+            }
+            // 保持轮询：要么继续累计失败再次重启，要么连接自行恢复后自动解除。
+            startStatusPolling()
+        }
         isRecovering = false
     }
 

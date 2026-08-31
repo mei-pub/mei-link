@@ -120,6 +120,13 @@ class FrpcProcess {
             return siblingPath
         }
 
+        // frpc.exe 兼容：与桌面端打包命名一致，也规避部分安全代理删除名为 "frpc" 的未签名新文件。
+        let exePath = executableDirectory.appendingPathComponent("frpc.exe").path
+        if FileManager.default.isExecutableFile(atPath: exePath) {
+            logger.info("找到 frpc: \(exePath)")
+            return exePath
+        }
+
         logger.warning("frpc 不在同目录: \(siblingPath)")
 
         // 回退到 Resources/ 目录

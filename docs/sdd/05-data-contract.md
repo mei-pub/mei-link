@@ -85,6 +85,9 @@
 | `showInDock` | Bool | false | 是否显示 Dock（当前未真正生效） |
 | `statusPollingInterval` | TimeInterval | 3.0 | 状态轮询间隔（运行时 clamp 3-30） |
 | `remoteReachabilityInterval` | TimeInterval | 60.0 | 远程探活间隔（运行时 clamp 30-600） |
+| `reconnectInterval` | TimeInterval | 10.0 | 自动重连：断连后的探测/重试间隔，也是两次重启的最小间隔（clamp 3-300） |
+| `maxReconnectAttempts` | Int | 3 | 自动重连：重建连接连续失败 N 次后升级为重启 frpc（clamp 1-30） |
+| `maxRestartAttempts` | Int | 3 | 自动重连：重启 frpc 连续失败 N 次后放弃自动恢复（clamp 1-30） |
 | `menuBarIconStyle` | MenuBarIconStyle | .portal | 菜单栏图标风格 |
 
 ### 4.1 `MenuBarIconStyle` 枚举值

@@ -87,13 +87,16 @@
 - `isRecovering`：`recoverConnection` 重入直接 return
 - `LockedFlag`（探活）：continuation 只 resume 一次，防 NWConnection stateUpdateHandler 与超时定时器同时触发
 
-### 4.3 自动恢复阈值（硬编码）
-- `maxConsecutiveFailuresBeforeRecovery = 3`：连续 3 次失败才触发恢复
-- `recoveryCooldown = 20` 秒：距上次恢复不足 20s 跳过
-- `statusPollingInterval` 运行时 clamp `[3, 30]`（即使设置成 1 也按 3 跑）
-- `remoteReachabilityInterval` 运行时 clamp `[30, 600]`
-- frpc 非 0 退出后 sleep 2s 再恢复（防抖）
+### 4.3 自动恢复阈值（两段式，可配置）
+两段式重连机制（三端一致：macOS 原生 / 桌面 / Docker）：
+- **第 1 段（重建连接）**：断连后 frpc 进程存活时其在后台自行重连，客户端按 `reconnectInterval` 周期探测计数；连续失败达到 `maxReconnectAttempts`（默认 3）后升级为重启
+- **第 2 段（重启 frpc）**：重启失败累计达到 `maxRestartAttempts`（默认 3）后放弃自动恢复，应用状态置"重连失败"，需手动点"连接"或等连接自行恢复后自动解除
+- 进程意外退出视为无法重建连接，直接进入重启（非 0 退出后 sleep 2s 防抖）
+- 重启最小间隔 = `reconnectInterval`（默认 10s，替代原硬编码 20s 冷却；被间隔挡下时只重排轮询定时器，不做立即探测，避免探测→拦截级联）
 - 恢复前 sleep 1s（给进程退出留时间）
+- 阈值均可在设置中修改，运行时 clamp：`reconnectInterval` [3, 300]、`maxReconnectAttempts`/`maxRestartAttempts` [1, 30]
+- 手动"断开"不会触发恢复（`reconnectFailed`/`restartFailures` 随之清零）
+- 连接恢复健康时自动清零两段计数并解除"重连中/重连失败"
 
 ### 4.4 异步等 Admin API
 - `start()` 用 `waitForAdminAPI`（async/await，5s 超时，500ms 间隔）
@@ -107,11 +110,12 @@
 - waitStart → yellow
 - startError / checkFailed → red
 - new / closed → gray
-- 应用级：isConnected → green / isFrpcRunning → yellow / 其余 → gray
+- 应用级：isConnected → green / reconnectFailed → red / isReconnecting 或 isFrpcRunning → yellow / 其余 → gray
 
 ### 5.2 状态文案（不能改）
 - 隧道：新建 / 连接中 / 启动失败 / 运行中 / 检查失败 / 已关闭
-- 应用：已连接 / 连接中 / 未连接 / 未配置
+- 应用：已连接 / 重连失败 / 重连中 / 连接中 / 未连接 / 未配置
+  - 判定顺序：`isConnected` > `reconnectFailed` > `isReconnecting` > `isFrpcRunning` > `isConfigured`
 
 ### 5.3 窗口尺寸（跨平台对齐基线）
 - 主窗口 1060×820（min 980×740）

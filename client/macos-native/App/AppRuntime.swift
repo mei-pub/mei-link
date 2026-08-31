@@ -93,6 +93,8 @@ final class StatusBarController: NSObject {
         let status = MenuBarStatusItem(
             isConnected: manager.isConnected,
             isFrpcRunning: manager.isFrpcRunning,
+            isReconnecting: manager.isReconnecting,
+            reconnectFailed: manager.reconnectFailed,
             style: manager.appSettings.menuBarIconStyle
         )
 

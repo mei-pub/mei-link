@@ -48,8 +48,14 @@ async function load() {
   if (!configuredForm) { fillConfig(serverConfig); configuredForm = true; }
 }
 function renderStatus(status) {
-  $("#statusText").textContent = status.connected ? "已连接" : status.running ? "连接中" : status.configured ? "未连接" : "未配置";
-  $("#statusDot").className = `dot ${status.connected ? "ok" : status.running || status.configured ? "warn" : ""}`;
+  let text; let dot;
+  if (status.connected) { text = "已连接"; dot = "ok"; }
+  else if (status.reconnectFailed) { text = "重连失败"; dot = "bad"; }
+  else if (status.reconnecting || status.running) { text = status.reconnecting ? "重连中" : "连接中"; dot = "warn"; }
+  else if (status.configured) { text = "未连接"; dot = "warn"; }
+  else { text = "未配置"; dot = ""; }
+  $("#statusText").textContent = text;
+  $("#statusDot").className = `dot ${dot}`;
 }
 function renderTunnels() {
   const target = $("#tunnelList");
@@ -174,7 +180,7 @@ function tunnelPayload(form) {
 }
 async function saveConfig(connectAfterSave = false) {
   const form = $("#configForm");
-  await api("/api/server-config", { method: "POST", body: JSON.stringify({ serverAddr: formValue(form, "serverAddr"), serverPort: Number(formValue(form, "serverPort")), authToken: formValue(form, "authToken"), subDomainHost: formValue(form, "subDomainHost"), tlsEnabled: field(form, "tlsEnabled").checked, adminPort: Number(formValue(form, "adminPort")), adminUser: formValue(form, "adminUser"), adminPassword: formValue(form, "adminPassword"), vhostHTTPPort: Number(formValue(form, "vhostHTTPPort")), vhostHTTPSPort: Number(formValue(form, "vhostHTTPSPort")), managementURL: formValue(form, "managementURL"), domainAPIToken: formValue(form, "domainAPIToken") }) });
+  await api("/api/server-config", { method: "POST", body: JSON.stringify({ serverAddr: formValue(form, "serverAddr"), serverPort: Number(formValue(form, "serverPort")), authToken: formValue(form, "authToken"), subDomainHost: formValue(form, "subDomainHost"), tlsEnabled: field(form, "tlsEnabled").checked, adminPort: Number(formValue(form, "adminPort")), adminUser: formValue(form, "adminUser"), adminPassword: formValue(form, "adminPassword"), vhostHTTPPort: Number(formValue(form, "vhostHTTPPort")), vhostHTTPSPort: Number(formValue(form, "vhostHTTPSPort")), managementURL: formValue(form, "managementURL"), domainAPIToken: formValue(form, "domainAPIToken"), reconnectInterval: Number(formValue(form, "reconnectInterval")), maxReconnectAttempts: Number(formValue(form, "maxReconnectAttempts")), maxRestartAttempts: Number(formValue(form, "maxRestartAttempts")) }) });
   field(form, "authToken").value = ""; field(form, "adminPassword").value = "";
   if (connectAfterSave) await api("/api/control/start", { method: "POST" });
   notify(connectAfterSave ? "设置已保存，正在连接" : "服务器设置已保存"); await load();

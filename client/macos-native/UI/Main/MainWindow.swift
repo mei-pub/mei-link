@@ -78,7 +78,7 @@ struct MainWindow: View {
     private var statusIndicator: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(manager.isConnected ? .green : manager.isFrpcRunning ? .yellow : .gray)
+                .fill(manager.isConnected ? .green : manager.reconnectFailed ? .red : manager.isFrpcRunning || manager.isReconnecting ? .yellow : .gray)
                 .frame(width: 10, height: 10)
             Text(statusText)
                 .font(.subheadline)
@@ -209,6 +209,8 @@ struct MainWindow: View {
 
     private var statusText: String {
         if manager.isConnected { return "已连接" }
+        if manager.reconnectFailed { return "重连失败" }
+        if manager.isReconnecting { return "重连中" }
         if manager.isFrpcRunning { return "连接中" }
         if manager.isConfigured { return "未连接" }
         return "未配置"

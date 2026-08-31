@@ -93,6 +93,80 @@ func TestLoadSettingsNormalizesSwiftMenuBarIconStyle(t *testing.T) {
 	}
 }
 
+func TestLoadSettingsDefaultsAutoReconnectFields(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".meilink")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Old Swift settings.json has no reconnect fields; decode must fall back to defaults.
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{
+		"autoStart": true,
+		"launchAtLogin": false,
+		"showInDock": false,
+		"statusPollingInterval": 4,
+		"remoteReachabilityInterval": 90,
+		"menuBarIconStyle": "portal"
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := NewManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := m.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.ReconnectInterval != 10.0 {
+		t.Fatalf("ReconnectInterval = %v, want 10", settings.ReconnectInterval)
+	}
+	if settings.MaxReconnectAttempts != 3 {
+		t.Fatalf("MaxReconnectAttempts = %d, want 3", settings.MaxReconnectAttempts)
+	}
+	if settings.MaxRestartAttempts != 3 {
+		t.Fatalf("MaxRestartAttempts = %d, want 3", settings.MaxRestartAttempts)
+	}
+}
+
+func TestSaveSettingsRoundTripsAutoReconnectFields(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".meilink")
+
+	m, err := NewManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SaveSettings(&AppSettings{
+		AutoStart:                  true,
+		StatusPollingInterval:      3.0,
+		RemoteReachabilityInterval: 60.0,
+		MenuBarIconStyle:           "portal",
+		ReconnectInterval:          15.0,
+		MaxReconnectAttempts:       5,
+		MaxRestartAttempts:         7,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := m.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ReconnectInterval != 15.0 {
+		t.Fatalf("ReconnectInterval = %v, want 15", loaded.ReconnectInterval)
+	}
+	if loaded.MaxReconnectAttempts != 5 {
+		t.Fatalf("MaxReconnectAttempts = %d, want 5", loaded.MaxReconnectAttempts)
+	}
+	if loaded.MaxRestartAttempts != 7 {
+		t.Fatalf("MaxRestartAttempts = %d, want 7", loaded.MaxRestartAttempts)
+	}
+}
+
 func TestLoadTunnelsAcceptsSwiftStatusNames(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

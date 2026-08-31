@@ -48,6 +48,7 @@ SDD 的事实基线是 `client/macos-native/` 下的 Swift 实现。跨平台客
 - Node.js + TypeScript，容器化 frpc + Web 管理 UI
 - 适合 NAS、家庭服务器、无头环境
 - 与桌面客户端业务逻辑对齐（frpc 进程管理、隧道 CRUD、Admin API）
+- 断连自动恢复为可配置两段式（重建连接 → 重启 frpc → 放弃），参数见服务器设置，详见 [03-architecture.md](03-architecture.md) §6
 
 ### 服务端
 

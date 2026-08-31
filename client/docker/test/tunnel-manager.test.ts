@@ -92,3 +92,29 @@ test("TunnelManager rejects a wildcard custom domain under the configured subdom
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("TunnelManager applies auto-reconnect defaults and clamps out-of-range values", async () => {
+  const { dir, manager } = await managerForTest();
+  try {
+    await manager.saveConfig({
+      serverAddr: "frp.example.test", serverPort: 7000, authToken: "token", subDomainHost: "example.test",
+      tlsEnabled: true, adminPort: 7400, adminUser: "admin", adminPassword: "password", vhostHTTPPort: 8080, vhostHTTPSPort: 8443,
+    });
+    const defaults = manager.serverConfig()!;
+    assert.equal(defaults.reconnectInterval, 10);
+    assert.equal(defaults.maxReconnectAttempts, 3);
+    assert.equal(defaults.maxRestartAttempts, 3);
+
+    await manager.saveConfig({
+      serverAddr: "frp.example.test", serverPort: 7000, authToken: "token", subDomainHost: "example.test",
+      tlsEnabled: true, adminPort: 7400, adminUser: "admin", adminPassword: "password", vhostHTTPPort: 8080, vhostHTTPSPort: 8443,
+      reconnectInterval: 1, maxReconnectAttempts: 0, maxRestartAttempts: 99,
+    });
+    const clamped = manager.serverConfig()!;
+    assert.equal(clamped.reconnectInterval, 3);
+    assert.equal(clamped.maxReconnectAttempts, 1);
+    assert.equal(clamped.maxRestartAttempts, 30);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

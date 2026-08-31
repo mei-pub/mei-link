@@ -14,9 +14,7 @@ import (
 )
 
 const (
-	maxConsecutiveFailuresBeforeRecovery = 3
-	recoveryCooldown                     = 20 * time.Second
-	maxEventLogSize                      = 100
+	maxEventLogSize = 100
 )
 
 // Manager orchestrates frpc process, admin API, and tunnel CRUD. It mirrors
@@ -42,12 +40,17 @@ type Manager struct {
 	isConnected   bool
 	ownsFrpc      bool
 
+	// two-level reconnect state
+	isReconnecting  bool
+	reconnectFailed bool
+	restartFailures int
+	lastRestartAt   time.Time
+
 	statusTimer             *time.Ticker
 	lastReachabilityProbeAt time.Time
 	isPollingStatus         bool
 	isRecovering            bool
 	consecutiveFailures     int
-	lastRecoveryAt          time.Time
 }
 
 // NewManager creates a new tunnel manager.
@@ -138,6 +141,11 @@ func NewManager(cfgDir string) (*Manager, error) {
 		// Auto-recover only on a genuine crash (non-intentional && status != 0).
 		// An intentional stop (status carries a signal value) must not recover.
 		if isCrash {
+			m.mu.Lock()
+			if !m.reconnectFailed {
+				m.isReconnecting = true
+			}
+			m.mu.Unlock()
 			go func() {
 				time.Sleep(2 * time.Second) // 防抖，与 Swift 对齐
 				m.recoverConnection(fmt.Sprintf("frpc 异常退出（状态码 %d），正在自动重启", status))
@@ -163,6 +171,20 @@ func (m *Manager) IsConnected() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.isConnected
+}
+
+// IsReconnecting returns whether the client is actively reconnecting.
+func (m *Manager) IsReconnecting() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.isReconnecting
+}
+
+// IsReconnectFailed returns whether automatic recovery gave up and awaits a manual retry.
+func (m *Manager) IsReconnectFailed() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.reconnectFailed
 }
 
 // PID returns the current frpc process ID, or 0 if not running.
@@ -525,6 +547,7 @@ func (m *Manager) Start() error {
 // Stop stops frpc and polling.
 func (m *Manager) Stop() {
 	m.stopStatusPolling()
+	m.ResetReconnectState()
 	m.mu.RLock()
 	ownsFrpc := m.ownsFrpc
 	wasRunning := m.isFrpcRunning
@@ -555,6 +578,7 @@ func (m *Manager) Stop() {
 // StopImmediately kills frpc without waiting.
 func (m *Manager) StopImmediately() {
 	m.stopStatusPolling()
+	m.ResetReconnectState()
 	m.mu.RLock()
 	ownsFrpc := m.ownsFrpc
 	m.mu.RUnlock()
@@ -573,6 +597,18 @@ func (m *Manager) Restart() error {
 	m.Stop()
 	time.Sleep(1 * time.Second)
 	return m.Start()
+}
+
+// ResetReconnectState clears two-level reconnect state on manual intervention
+// (连接 / 断开 / 深度重启) or when the connection recovers naturally.
+func (m *Manager) ResetReconnectState() {
+	m.mu.Lock()
+	m.reconnectFailed = false
+	m.isReconnecting = false
+	m.restartFailures = 0
+	m.consecutiveFailures = 0
+	m.lastRestartAt = time.Time{}
+	m.mu.Unlock()
 }
 
 func (m *Manager) waitForAdminAPI() error {
@@ -605,13 +641,36 @@ func (m *Manager) copyTunnelsLocked() []config.Tunnel {
 
 // --- Status polling, probe, recovery (mirrors Swift pollStatus/recover) ---
 
+// effectivePollingInterval returns the status probe interval: the fast UI
+// refresh cadence while connected, or the reconnect interval while disconnected.
+func (m *Manager) effectivePollingInterval() float64 {
+	m.mu.RLock()
+	connected := m.isConnected
+	statusPoll := m.settings.StatusPollingInterval
+	reconnect := m.settings.ReconnectInterval
+	m.mu.RUnlock()
+	if connected {
+		return clampInterval(statusPoll, 3, 30)
+	}
+	return clampInterval(reconnect, 3, 300)
+}
+
 func (m *Manager) startStatusPolling() {
+	m.startStatusPollingWithPoll(true)
+}
+
+// startStatusPollingWithPoll arms the status timer. When immediate is true the
+// goroutine also runs one pollStatus right away (used on normal startup); the
+// reconnect-interval gate uses immediate=false to avoid a probe→gate→probe cascade.
+func (m *Manager) startStatusPollingWithPoll(immediate bool) {
 	m.stopStatusPolling()
-	interval := clampInterval(m.settings.StatusPollingInterval, 3, 30)
+	interval := m.effectivePollingInterval()
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	m.statusTimer = ticker
 	go func() {
-		m.pollStatus()
+		if immediate {
+			m.pollStatus()
+		}
 		for range ticker.C {
 			m.pollStatus()
 		}
@@ -620,6 +679,17 @@ func (m *Manager) startStatusPolling() {
 
 func (m *Manager) restartStatusPolling() {
 	if m.statusTimer != nil {
+		m.startStatusPolling()
+	}
+}
+
+// rescheduleStatusPollingIfNeeded re-arms the timer at the interval matching the
+// current phase (healthy ↔ disconnected). No-op when polling is not running.
+func (m *Manager) rescheduleStatusPollingIfNeeded() {
+	m.mu.RLock()
+	running := m.statusTimer != nil
+	m.mu.RUnlock()
+	if running {
 		m.startStatusPolling()
 	}
 }
@@ -729,10 +799,20 @@ func (m *Manager) pollStatus() {
 	}
 
 	m.mu.Lock()
+	wasConnected := m.isConnected
 	m.consecutiveFailures = 0
+	m.restartFailures = 0
 	m.isFrpcRunning = true
 	m.isConnected = true
+	if !wasConnected {
+		// 恢复健康：解除"重连中/重连失败"，并按状态轮询间隔重排定时器。
+		m.isReconnecting = false
+		m.reconnectFailed = false
+	}
 	m.mu.Unlock()
+	if !wasConnected {
+		m.rescheduleStatusPollingIfNeeded()
+	}
 }
 
 func isTransitionalStatus(status string) bool {
@@ -772,29 +852,49 @@ func (m *Manager) recordConnectivityFailure(reason string) {
 	m.mu.Lock()
 	m.consecutiveFailures++
 	m.isConnected = false
-	shouldRecover := m.consecutiveFailures >= maxConsecutiveFailuresBeforeRecovery
+	if !m.reconnectFailed {
+		m.isReconnecting = true
+	}
+	firstFailure := m.consecutiveFailures == 1
+	// 第 1 段（重建连接）：frpc 进程存活时其在后台自行重连，这里只累计失败。
+	shouldRecover := false
+	if !m.reconnectFailed {
+		shouldRecover = m.consecutiveFailures >= clampInt(m.settings.MaxReconnectAttempts, 1, 30)
+	}
 	m.mu.Unlock()
 
-	if m.consecutiveFailures == 1 {
+	if firstFailure {
 		m.addEvent(fmt.Sprintf("连接检测失败: %s", reason), "warning")
+		m.rescheduleStatusPollingIfNeeded()
 	}
 	if shouldRecover {
 		m.recoverConnection(reason)
 	}
 }
 
+// 第 2 段（重启 frpc）：重启失败累计 maxRestartAttempts 次后放弃自动恢复。
 func (m *Manager) recoverConnection(reason string) {
 	m.mu.Lock()
 	if m.isRecovering {
 		m.mu.Unlock()
 		return
 	}
-	if time.Since(m.lastRecoveryAt) < recoveryCooldown {
+	if m.reconnectFailed {
 		m.mu.Unlock()
 		return
 	}
+	// 重启最小间隔：reconnectInterval 内不重复重启（替代原 20s 冷却）。
+	// 被间隔挡下时只重排轮询定时器（不做立即探测，避免探测→拦截的级联），
+	// 由后续探测继续累计失败并再次触发。
+	reconnectInterval := clampInterval(m.settings.ReconnectInterval, 3, 300)
+	if !m.lastRestartAt.IsZero() && time.Since(m.lastRestartAt) < time.Duration(reconnectInterval)*time.Second {
+		m.mu.Unlock()
+		m.startStatusPollingWithPoll(false)
+		return
+	}
 	m.isRecovering = true
-	m.lastRecoveryAt = time.Now()
+	m.lastRestartAt = time.Now()
+	m.isReconnecting = true
 	m.mu.Unlock()
 
 	defer func() {
@@ -803,7 +903,7 @@ func (m *Manager) recoverConnection(reason string) {
 		m.mu.Unlock()
 	}()
 
-	m.addEvent(fmt.Sprintf("连接连续异常，正在自动重连: %s", reason), "warning")
+	m.addEvent(fmt.Sprintf("连接连续异常，正在重启 frpc: %s", reason), "warning")
 	m.stopStatusPolling()
 	m.mu.RLock()
 	ownsFrpc := m.ownsFrpc
@@ -816,11 +916,32 @@ func (m *Manager) recoverConnection(reason string) {
 	m.isConnected = false
 	m.ownsFrpc = false
 	m.consecutiveFailures = 0
+	m.restartFailures++
+	restartFailures := m.restartFailures
+	maxRestarts := clampInt(m.settings.MaxRestartAttempts, 1, 30)
 	m.mu.Unlock()
 	time.Sleep(1 * time.Second)
 	if err := m.Start(); err != nil {
-		m.addEvent(fmt.Sprintf("自动重连失败: %v", err), "error")
+		m.addEvent(fmt.Sprintf("第 %d/%d 次重启失败: %v", restartFailures, maxRestarts, err), "error")
+		m.mu.Lock()
+		gaveUp := m.restartFailures >= maxRestarts
+		if gaveUp {
+			m.reconnectFailed = true
+			m.isReconnecting = false
+			m.restartFailures = 0
+		}
+		m.mu.Unlock()
+		if gaveUp {
+			m.addEvent("自动重连已放弃：重启次数耗尽，请手动重试", "error")
+		}
+		// 保持轮询：要么继续累计失败再次重启，要么连接自行恢复后自动解除。
+		m.startStatusPolling()
+		return
 	}
+	m.addEvent("frpc 重启成功，连接已恢复", "info")
+	m.mu.Lock()
+	m.restartFailures = 0
+	m.mu.Unlock()
 }
 
 func joinNames(names []string) string {
@@ -845,6 +966,16 @@ func filterEnabled(tunnels []config.Tunnel) []config.Tunnel {
 }
 
 func clampInterval(v, min, max float64) float64 {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
+func clampInt(v, min, max int) int {
 	if v < min {
 		return min
 	}

@@ -13,6 +13,12 @@ export interface ServerConfig {
   managementURL?: string;
   /** 拉取 /api/domains 用的 Bearer token（对应服务端 MEILINK_DOMAIN_API_TOKEN）。 */
   domainAPIToken?: string;
+  /** 自动重连：断连后每次探测/等待的间隔（秒）。默认 10，clamp [3, 300]。 */
+  reconnectInterval?: number;
+  /** 自动重连：重建连接连续失败多少次后升级为重启 frpc。默认 3，clamp [1, 30]。 */
+  maxReconnectAttempts?: number;
+  /** 自动重连：重启 frpc 连续失败多少次后放弃自动恢复。默认 3，clamp [1, 30]。 */
+  maxRestartAttempts?: number;
 }
 
 export function generateFrpcToml(config: ServerConfig, dataDir: string): string {

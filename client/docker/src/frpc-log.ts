@@ -11,3 +11,8 @@ export function cleanFrpcLogLine(line: string): string | null {
 export function isFrpcLoginSuccess(line: string): boolean {
   return cleanFrpcLogLine(line)?.includes("login to server success") ?? false;
 }
+
+/** frp v0.70.0 在连接/重连失败时输出 "connect to server error: ..."（client/service.go:319）。 */
+export function isFrpcConnectionFailure(line: string): boolean {
+  return cleanFrpcLogLine(line)?.includes("connect to server error") ?? false;
+}

@@ -79,7 +79,8 @@ export function canOpen(tunnel) {
 export function overallStatus(status) {
   if (!status.configured) return { text: "未配置", dotClass: "stopped" };
   if (status.connected) return { text: "已连接", dotClass: "running" };
-  if (status.running) return { text: "连接中", dotClass: "connecting" };
+  if (status.reconnectFailed) return { text: "重连失败", dotClass: "error" };
+  if (status.reconnecting || status.running) return { text: status.reconnecting ? "重连中" : "连接中", dotClass: "connecting" };
   return { text: "未连接", dotClass: "stopped" };
 }
 

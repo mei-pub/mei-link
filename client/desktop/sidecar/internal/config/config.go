@@ -304,6 +304,12 @@ type AppSettings struct {
 	StatusPollingInterval      float64 `json:"statusPollingInterval"`
 	RemoteReachabilityInterval float64 `json:"remoteReachabilityInterval"`
 	MenuBarIconStyle           string  `json:"menuBarIconStyle,omitempty"`
+	// Auto-reconnect: probe/wait interval in seconds after a disconnect.
+	ReconnectInterval float64 `json:"reconnectInterval"`
+	// Auto-reconnect: rebuild-connection failures before restarting frpc.
+	MaxReconnectAttempts int `json:"maxReconnectAttempts"`
+	// Auto-reconnect: failed restarts before giving up.
+	MaxRestartAttempts int `json:"maxRestartAttempts"`
 }
 
 // Manager handles all persistent configuration files.
@@ -444,6 +450,9 @@ func (m *Manager) LoadSettings() (*AppSettings, error) {
 		StatusPollingInterval:      3.0,
 		RemoteReachabilityInterval: 60.0,
 		MenuBarIconStyle:           "portal",
+		ReconnectInterval:          10.0,
+		MaxReconnectAttempts:       3,
+		MaxRestartAttempts:         3,
 	}
 	data, err := os.ReadFile(m.settingsPath())
 	if err != nil {
