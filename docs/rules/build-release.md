@@ -120,7 +120,12 @@ Meilink.app/
   security export -k ~/Library/Keychains/login.keychain-db -t certs -f pkcs12 -P '<密码>' -o Meilink.p12
   base64 -i Meilink.p12 | pbcopy   # 粘贴到 secrets.CERTIFICATE_P12
   ```
-- 未公证（notarize）的 Developer ID 包首次打开仍会被 Gatekeeper 拦（"无法验证开发者"→ 右键打开/系统设置→隐私与安全性→仍要打开）；公证需要 Apple ID 凭据，另配 secrets
+- **公证（notarization）**：Developer ID 签名 + 公证后首次打开不再被 Gatekeeper 拦。
+  CI 在签名后对 .app 执行 `notarytool submit --wait` + `stapler staple`（build-desktop.sh 与
+  release.yml swift-native job），凭据来自 secrets：
+  `NOTARIZATION_APPLE_ID`（Apple ID 邮箱）、`NOTARIZATION_APPLE_PASSWORD`（App 专用密码，
+  appleid.apple.com → 登录与安全 → App 专用密码）、`NOTARIZATION_TEAM_ID`（默认 8KV7MAV54M）。
+  本地无凭据时跳过公证，不影响构建。
 
 ### 2.5 DMG 结构
 `make_dmg` 生成标准 DMG：

@@ -89,6 +89,11 @@ jobs:
 
       - name: Build Tauri desktop client
         shell: bash
+        env:
+          # 传给 build-desktop.sh：存在时对签名后的 .app 做公证 + staple
+          NOTARIZATION_APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID }}
+          NOTARIZATION_APPLE_PASSWORD: ${{ secrets.NOTARIZATION_APPLE_PASSWORD }}
+          NOTARIZATION_TEAM_ID: ${{ secrets.NOTARIZATION_TEAM_ID }}
         run: bash scripts/build/build-desktop.sh --copy "${{ steps.ver.outputs.APP_VERSION }}"
 
       - name: Upload artifacts
@@ -164,6 +169,10 @@ jobs:
 
       - name: Package Swift .app + DMG
         shell: bash
+        env:
+          NOTARIZATION_APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID }}
+          NOTARIZATION_APPLE_PASSWORD: ${{ secrets.NOTARIZATION_APPLE_PASSWORD }}
+          NOTARIZATION_TEAM_ID: ${{ secrets.NOTARIZATION_TEAM_ID }}
         run: |
           set -e
           VERSION="${{ steps.ver.outputs.APP_VERSION }}"
@@ -217,6 +226,22 @@ jobs:
             echo "  ✓ signed"
           else
             echo "  ! no Developer ID identity found; leaving bundle unsigned"
+          fi
+
+          # 公证（可选）：凭据存在时对 .app 做 notarytool 公证 + staple，
+          # Gatekeeper 才不会拦首次打开（否则报"已损坏，无法打开"）。
+          if [ -n "$NOTARIZATION_APPLE_ID" ] && [ -n "$NOTARIZATION_APPLE_PASSWORD" ]; then
+            echo ">>> Notarizing $APP_BUNDLE ..."
+            ZIP="/tmp/meilink-notarize-$$.zip"
+            ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP"
+            xcrun notarytool submit "$ZIP" \
+              --apple-id "$NOTARIZATION_APPLE_ID" \
+              --password "$NOTARIZATION_APPLE_PASSWORD" \
+              --team-id "${NOTARIZATION_TEAM_ID:-8KV7MAV54M}" \
+              --wait
+            xcrun stapler staple "$APP_BUNDLE"
+            rm -f "$ZIP"
+            echo "  ✓ notarized + stapled"
           fi
 
           echo "=== .app bundle contents ==="

@@ -151,6 +151,21 @@ if [ "$GOOS" = "darwin" ]; then
                 echo "  ! ad-hoc signing verification failed (continuing anyway)"
             fi
         fi
+        # 公证（可选）：有 NOTARIZATION_APPLE_ID/PASSWORD 时对签名后的 .app
+        # 做 notarytool 公证 + staple，Gatekeeper 才不会拦首次打开。
+        if [ -n "${NOTARIZATION_APPLE_ID:-}" ] && [ -n "${NOTARIZATION_APPLE_PASSWORD:-}" ]; then
+            echo ">>> Notarizing $APP_PATH ..."
+            ZIP="/tmp/meilink-notarize-$$.zip"
+            ditto -c -k --keepParent "$APP_PATH" "$ZIP"
+            xcrun notarytool submit "$ZIP" \
+                --apple-id "$NOTARIZATION_APPLE_ID" \
+                --password "$NOTARIZATION_APPLE_PASSWORD" \
+                --team-id "${NOTARIZATION_TEAM_ID:-8KV7MAV54M}" \
+                --wait
+            xcrun stapler staple "$APP_PATH"
+            rm -f "$ZIP"
+            echo "  ✓ notarized + stapled"
+        fi
         # Build the DMG ourselves from the signed .app.
         # 文件名用 APP_VERSION（不再写死 1.1.0），跟随 git tag 或传入的版本号。
         SIGNED_DMG="$DESKTOP_DIR/src-tauri/target/release/bundle/dmg/Meilink_${APP_VERSION}_aarch64.dmg"
