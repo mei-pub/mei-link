@@ -131,12 +131,25 @@ if [ "$GOOS" = "darwin" ]; then
         APP_PATH="$DESKTOP_DIR/src-tauri/target/release/Meilink.app"
     fi
     if [ -d "$APP_PATH" ]; then
-        echo ">>> Ad-hoc signing $APP_PATH ..."
-        codesign --force --deep --sign - "$APP_PATH" 2>&1 | tail -3
-        if codesign --verify --deep --strict "$APP_PATH" 2>/dev/null; then
-            echo "  ✓ ad-hoc signed"
+        # 有 Developer ID 证书时做正式签名；无证书保持 ad-hoc。
+        # frpc.exe 保持系统 linker-signed（macOS 15+），不单独重签。
+        CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
+        if [ -n "$CODESIGN_IDENTITY" ]; then
+            echo ">>> Signing $APP_PATH with $CODESIGN_IDENTITY ..."
+            codesign --force --options runtime --sign "$CODESIGN_IDENTITY" "$APP_PATH" 2>&1 | tail -2
+            if codesign --verify --deep --strict "$APP_PATH" 2>/dev/null; then
+                echo "  ✓ Developer ID signed"
+            else
+                echo "  ! signature verification failed (continuing anyway)"
+            fi
         else
-            echo "  ! ad-hoc signing verification failed (continuing anyway)"
+            echo ">>> Ad-hoc signing $APP_PATH ..."
+            codesign --force --deep --sign - "$APP_PATH" 2>&1 | tail -3
+            if codesign --verify --deep --strict "$APP_PATH" 2>/dev/null; then
+                echo "  ✓ ad-hoc signed"
+            else
+                echo "  ! ad-hoc signing verification failed (continuing anyway)"
+            fi
         fi
         # Build the DMG ourselves from the signed .app.
         # 文件名用 APP_VERSION（不再写死 1.1.0），跟随 git tag 或传入的版本号。

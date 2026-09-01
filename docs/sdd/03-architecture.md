@@ -226,17 +226,19 @@ flowchart TD
 
 恢复路径都被 `isRecovering` 标志保护，防止重入。
 
-> **可配置两段式重连（三端一致：macOS 原生 / 桌面 / Docker）**：
+> **可配置两段式重连 + 保活（三端一致：macOS 原生 / 桌面 / Docker）**：
 > 第 1 段（重建连接）——断连后 frpc 进程存活时其在后台自行重连，客户端按
 > `reconnectInterval`（默认 10s）周期探测计数，连续失败达到 `maxReconnectAttempts`
 > （默认 3）后升级为重启；第 2 段（重启 frpc）——重启失败累计 `maxRestartAttempts`
-> （默认 3）后放弃自动恢复（应用状态"重连失败"，需手动"连接"或等连接自行恢复后自动解除）。
-> 进程意外退出直接进入重启。阈值存于 `settings.json`（Swift/Go 共享）与 docker 的
-> `config.json`，可在设置中修改，使用点 clamp。重启最小间隔 = `reconnectInterval`
-> （替代原硬编码 20s 冷却），被间隔挡下时只重排轮询定时器不做立即探测。
-> 断连期间轮询改用 `reconnectInterval` 间隔（健康时用 `statusPollingInterval`）。
-> Docker 客户端实现见 `client/docker/src/reconnect.ts`（先验证），Swift 见
-> `TunnelManager.recoverConnection`，Go 见 `desktop/sidecar/internal/tunnel/manager.go`。
+> （默认 3）后放弃自动重启（应用状态"重连失败"，避免重启风暴），但**保持低频探测，
+> 连接自行恢复时自动解除**"重连失败"。进程意外退出直接进入重启。
+> **保活**：有配置即持续运行——容器/进程重启后自动连接（docker 启动时
+> `autoStartIfConfigured`；Swift 有 `startIfNeeded`；Go sidecar AutoStart 自动 Start）。
+> 阈值存于 `settings.json`（Swift/Go 共享）与 docker 的 `config.json`，可在设置中修改，
+> 使用点 clamp。重启最小间隔 = `reconnectInterval`（替代原硬编码 20s 冷却），被间隔
+> 挡下时只重排轮询定时器不做立即探测。断连期间轮询改用 `reconnectInterval` 间隔
+> （健康时用 `statusPollingInterval`）。Docker 客户端实现见 `client/docker/src/reconnect.ts`，
+> Swift 见 `TunnelManager.recoverConnection`，Go 见 `desktop/sidecar/internal/tunnel/manager.go`。
 
 ## 7. 并发与线程模型
 

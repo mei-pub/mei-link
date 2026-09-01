@@ -167,6 +167,12 @@ if xcodebuild_available; then
                       build >/dev/null 2>&1; then
             APP_PATH="$(find "$NATIVE_BUILD" -name 'Meilink.app' -type d | head -1)"
             if [ -n "$APP_PATH" ]; then
+                # Developer ID 签名（有证书时）。frpc.exe 保持系统 linker-signed
+                # （macOS 15+ 链接器自动签名，重签会报 Operation not permitted）。
+                CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
+                if [ -n "$CODESIGN_IDENTITY" ]; then
+                    codesign --force --options runtime --sign "$CODESIGN_IDENTITY" "$APP_PATH" && echo "  ✓ signed: $CODESIGN_IDENTITY"
+                fi
                 make_dmg "$APP_PATH" "$NATIVE_DMG"
                 echo "  ✓ $(basename "$NATIVE_DMG") (fresh build)"
             else
@@ -218,7 +224,14 @@ if [ ! -f "$NATIVE_DMG" ]; then
               -c "Add :LSUIElement bool true" \
               -c "Add :NSAppTransportSecurity dict" \
               -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" \
+              -c "Add :CFBundleIconFile string AppIcon" \
               "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
+            # Developer ID 签名（有证书时；frpc.exe 保持系统 linker-signed）
+            CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
+            if [ -n "$CODESIGN_IDENTITY" ]; then
+                codesign --force --options runtime --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
+                echo "  ✓ signed: $CODESIGN_IDENTITY"
+            fi
             echo "  ✓ .app bundle built from Swift binary"
             make_dmg "$APP_BUNDLE" "$NATIVE_DMG"
             echo "  ✓ $(basename "$NATIVE_DMG") (from Swift binary)"

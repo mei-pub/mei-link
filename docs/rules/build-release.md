@@ -101,6 +101,26 @@ Meilink.app/
 
 - `CFBundleIdentifier = pub.mei.meilink`（不要改，会破坏 Login Items + Keychain）
 - `LSMinimumSystemVersion = 13.0`
+- **Info.plist 必须含 `CFBundleIconFile = AppIcon`**（否则 Finder/Dock 不显示图标；icns 已拷入 Resources 但未注册同样不显示）
+- **Info.plist 必须含 `NSAppTransportSecurity.NSAllowsArbitraryLoads = true`**（managementURL 常为 http://host:port，ATS 默认拦明文 HTTP，导致 /api/domains 拉取失败）
+- **CI 的 SwiftPM 打包路径（release.yml swift-native job）必须与 xcodebuild 路径保持同样的 Info.plist 字段 + 签名**（两处都可能落后）
+
+### 2.10 macOS 签名（Developer ID）
+- 证书：Developer ID Application（如 `Developer ID Application: Income Mei (8KV7MAV54M)`），本机 `security find-identity -v -p codesigning` 可查
+- 签名命令（只签主 .app；frpc.exe 保持系统 linker-signed，macOS 15+ 链接器自动加 adhoc 签名，重签会报 `Operation not permitted`）：
+  ```bash
+  codesign --force --options runtime --sign "$IDENTITY" "$APP"
+  codesign --verify --deep --strict "$APP"
+  ```
+- `--options runtime` = hardened runtime（公证必需）
+- 无证书时回退 ad-hoc（`codesign --sign -`），仅消除"已损坏"错误，Gatekeeper 仍提示"未识别开发者"
+- **CI runner 没有本机证书**：需把 Developer ID 证书导出 p12（base64）配到 GitHub secrets `CERTIFICATE_P12` + `CERTIFICATE_PASSWORD`，workflow 导入 keychain 后构建（见 release.yml 的 "Import Apple certificate" 步骤）
+- 证书导出（本机钥匙串）：
+  ```bash
+  security export -k ~/Library/Keychains/login.keychain-db -t certs -f pkcs12 -P '<密码>' -o Meilink.p12
+  base64 -i Meilink.p12 | pbcopy   # 粘贴到 secrets.CERTIFICATE_P12
+  ```
+- 未公证（notarize）的 Developer ID 包首次打开仍会被 Gatekeeper 拦（"无法验证开发者"→ 右键打开/系统设置→隐私与安全性→仍要打开）；公证需要 Apple ID 凭据，另配 secrets
 
 ### 2.5 DMG 结构
 `make_dmg` 生成标准 DMG：
@@ -175,6 +195,14 @@ Meilink.app/
 - [ ] SDD：`07-build-release.md` 同步
 
 ## 4. 反例
+
+### 3.7 改签名 / 图标注册
+- [ ] Info.plist 生成处（project.yml / CI swift-native job / build-all.sh fallback）确认含 `CFBundleIconFile` + `NSAppTransportSecurity`
+- [ ] 签名命令统一走 `CODESIGN_IDENTITY` 自动检测（`security find-identity ... Developer ID Application`），无证书回退 ad-hoc
+- [ ] `build-desktop.sh` / `build-all.sh`：Developer ID 签名主 .app（frpc.exe 不单独重签，保持 linker-signed）
+- [ ] CI：release.yml 两个 macOS job 的 "Import Apple certificate" 步骤（依赖 secrets `CERTIFICATE_P12` / `CERTIFICATE_PASSWORD`）
+- [ ] 验证：`codesign --verify --deep --strict` + `codesign -dv`（TeamIdentifier 正确）
+- [ ] SDD：`07-build-release.md` 同步
 
 ### 4.1 反例：frp 版本六处不同步
 ```bash

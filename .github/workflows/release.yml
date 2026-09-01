@@ -61,6 +61,24 @@ jobs:
         working-directory: client/desktop
         run: npm install
 
+      - name: Import Apple certificate (macOS, optional)
+        # 有 Developer ID 证书时导入 keychain，build-desktop.sh 会用它给
+        # .app 做 Developer ID 签名（无证书时回退 ad-hoc）。
+        if: runner.os == 'macOS' && env.CERTIFICATE_P12 != ''
+        env:
+          CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+        run: |
+          set -e
+          echo "$CERTIFICATE_P12" | base64 --decode > /tmp/meilink-cert.p12
+          KEYCHAIN="meilink-signing.keychain-db"
+          security create-keychain -p "meilink" "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security unlock-keychain -p "meilink" "$KEYCHAIN"
+          security import /tmp/meilink-cert.p12 -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "meilink" "$KEYCHAIN"
+          rm -f /tmp/meilink-cert.p12
+
       - name: Resolve version
         id: ver
         shell: bash
@@ -126,6 +144,24 @@ jobs:
           file "$BIN_PATH"
           echo "✓ Swift binary built"
 
+      - name: Import Apple certificate (optional)
+        # 有 Developer ID 证书（secrets.CERTIFICATE_P12）时导入 keychain，
+        # 用于对原生 .app 做 Developer ID 签名。
+        if: env.CERTIFICATE_P12 != ''
+        env:
+          CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+        run: |
+          set -e
+          echo "$CERTIFICATE_P12" | base64 --decode > /tmp/meilink-cert.p12
+          KEYCHAIN="meilink-signing.keychain-db"
+          security create-keychain -p "meilink" "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security unlock-keychain -p "meilink" "$KEYCHAIN"
+          security import /tmp/meilink-cert.p12 -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "meilink" "$KEYCHAIN"
+          rm -f /tmp/meilink-cert.p12
+
       - name: Package Swift .app + DMG
         shell: bash
         run: |
@@ -148,7 +184,16 @@ jobs:
           BUILT_PRODUCTS_DIR="$APP_BUNDLE/Contents" CONTENTS_FOLDER_PATH="" \
             bash scripts/assets/download-frpc.sh
 
-          # 生成 Info.plist（用 printf 避免 heredoc 在 YAML 中解析问题）
+          # 复制图标（先在 Resources 放好，Info.plist 再注册 CFBundleIconFile）
+          if [ -f "client/macos-native/Resources/AppIcon.icns" ]; then
+            cp "client/macos-native/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
+          fi
+
+          # 生成 Info.plist（用 printf 避免 heredoc 在 YAML 中解析问题）。
+          # CFBundleIconFile 必须注册，否则 Finder/Dock 不显示应用图标。
+          # NSAppTransportSecurity.NSAllowsArbitraryLoads=true 是 REQUIRED：
+          # managementURL 通常是 http://host:port，ATS 默认拦截明文 HTTP，
+          # 会导致 /api/domains 拉取失败（显示"改为手动填写"）。
           /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string Meilink" \
             -c "Add :CFBundleIdentifier string pub.mei.meilink" \
             -c "Add :CFBundleName string Meilink" \
@@ -158,11 +203,20 @@ jobs:
             -c "Add :CFBundlePackageType string APPL" \
             -c "Add :LSMinimumSystemVersion string 13.0" \
             -c "Add :LSUIElement bool true" \
+            -c "Add :CFBundleIconFile string AppIcon" \
+            -c "Add :NSAppTransportSecurity dict" \
+            -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" \
             "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
 
-          # 复制 AppIcon（如果存在）
-          if [ -f "client/macos-native/Resources/AppIcon.icns" ]; then
-            cp "client/macos-native/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
+          # Developer ID 签名（有证书时；无证书保持未签名以便 ad-hoc 检查）
+          CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
+          if [ -n "$CODESIGN_IDENTITY" ]; then
+            echo ">>> Signing with $CODESIGN_IDENTITY ..."
+            codesign --force --options runtime --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
+            codesign --verify --deep --strict "$APP_BUNDLE"
+            echo "  ✓ signed"
+          else
+            echo "  ! no Developer ID identity found; leaving bundle unsigned"
           fi
 
           echo "=== .app bundle contents ==="

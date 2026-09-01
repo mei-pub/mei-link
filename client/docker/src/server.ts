@@ -58,6 +58,9 @@ export async function createMeilinkServer(options: MeilinkServerOptions = {}): P
     ...(options.adminPassword ? { MEILINK_ADMIN_PASSWORD: options.adminPassword } : {}),
   });
   await manager.load();
+  // 容器/进程重启后自动恢复：有配置就拉起 frpc 并进入保活（断连/崩溃由 watchdog 接管）。
+  // 不阻塞 HTTP 启动；失败会由 watchdog 按重连设置继续处理。
+  void manager.autoStartIfConfigured();
 
   return createServer(async (request, response) => {
     try {

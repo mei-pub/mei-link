@@ -78,9 +78,30 @@ test("failed restarts give up after maxRestartAttempts", async () => {
   assert.equal(controller.currentState(), "failed");
   assert.equal(calls.restart, 2);
   assert.equal(controller.restartAttempts(), 2);
-  // 放弃后不再自动动作
+  // 放弃后不再自动重启
   await controller.check();
   assert.equal(calls.restart, 2);
+  controller.stop();
+});
+
+test("after giving up, a self-recovered connection clears the failed state", async () => {
+  let connected = false;
+  const { controller, calls } = makeController({
+    maxReconnectAttempts: 1,
+    maxRestartAttempts: 1,
+    probe: () => ({ alive: true, connected }),
+    restart: async () => false,
+  });
+  controller.start();
+  // 首次探测失败 → 重启 → 重启失败 → 放弃
+  await controller.check();
+  assert.equal(controller.currentState(), "failed");
+  assert.equal(calls.restart, 1);
+  // 连接自行恢复（如 frpc 重新登录成功）→ 下一次探测自动解除失败态
+  connected = true;
+  await controller.check();
+  assert.equal(controller.currentState(), "active");
+  assert.equal(controller.restartAttempts(), 0);
   controller.stop();
 });
 

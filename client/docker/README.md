@@ -84,19 +84,23 @@ when editing HTTP/HTTPS tunnels. In **服务器设置**, fill in **管理页地�
 **域名拉取 Token**, then click **拉取配置** (nothing is saved until you press
 **保存设置**). Server-side configuration lives in the [server Docker README](../../server/docker-managed/README.md).
 
-## Auto reconnect
+## Auto reconnect (keep-alive)
 
-Once connected, the client watches the frpc connection and recovers from
-unexpected disconnects and crashes automatically:
+The client keeps tunnels alive whenever a server config exists — no matter how
+the connection was lost:
 
-1. **Rebuild the connection** — when the server drops but the frpc process stays
-   alive, frpc reconnects on its own; the client probes every **重连间隔** and
-   counts consecutive failures.
-2. **Restart frpc** — after **最大重连次数** consecutive failures, the client
-   restarts the frpc process for a fresh connection attempt.
-3. **Give up** — after **最大重启次数** consecutive failed restarts, automatic
-   recovery stops and the UI shows **重连失败**; click **连接** to retry
-   manually.
+- **Container / process restart** — as long as `config.json` exists, the client
+  starts frpc automatically on boot and enters keep-alive mode. No manual click
+  needed.
+- **Rebuild the connection** — when the server drops but the frpc process stays
+  alive, frpc reconnects on its own; the client probes every **重连间隔** and
+  counts consecutive failures.
+- **Restart frpc** — after **最大重连次数** consecutive failures, the client
+  restarts the frpc process for a fresh connection attempt.
+- **Give up** — after **最大重启次数** consecutive failed restarts, the UI shows
+  **重连失败** and the client stops restarting (to avoid a restart storm), but it
+  keeps probing: as soon as the connection comes back on its own, **重连失败**
+  clears automatically.
 
 Configure the three parameters in **服务器设置 → 自动重连**:
 

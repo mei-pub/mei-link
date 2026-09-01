@@ -96,6 +96,17 @@ export class TunnelManager {
     this.frpc.stop();
     this.log("隧道管理器已停止");
   }
+
+  /** 有配置则自动连接并保持保活：容器/进程重启后无需手动点击即可恢复隧道。 */
+  async autoStartIfConfigured() {
+    if (!this.config) return;
+    try {
+      await this.start();
+    } catch (error) {
+      // start() 失败时 watchdog 已在 finally 中接管，会按重连设置持续探测/重启。
+      this.log(`自动连接失败: ${error instanceof Error ? error.message : String(error)}`, "error");
+    }
+  }
   async saveTunnels(tunnels: Tunnel[]) { this.current = tunnels; await this.store.saveTunnels(tunnels); if (this.frpc.running()) await this.syncProxies(); }
 
   async createTunnel(input: TunnelInput): Promise<Tunnel> {

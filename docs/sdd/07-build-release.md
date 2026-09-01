@@ -246,6 +246,8 @@ docker compose up -d
 - [ ] frp 版本号在六处一致：`scripts/assets/download-frpc.sh` / `scripts/build/build-frpc.sh` / `scripts/build/build-desktop.sh` / `server/bare-metal/deploy-frps.sh` / `server/docker-managed/Dockerfile` / `server/setup/main.go`
 - [ ] `client/macos-native/Resources/AppIcon.png` 与 `AppIcon.icns` 已更新（若改了图标）
 - [ ] `scripts/assets/gen-icons.sh` 已重跑（若改了源图标）
+- [ ] macOS .app 的 Info.plist 含 `CFBundleIconFile` + `NSAppTransportSecurity.NSAllowsArbitraryLoads`（原生 SwiftPM 打包路径与 xcodebuild 路径都要有）
+- [ ] macOS 签名：有 Developer ID 证书时产物已签名（`codesign --verify --deep --strict` + TeamIdentifier 正确；CI 依赖 secrets `CERTIFICATE_P12` / `CERTIFICATE_PASSWORD`）——详见 [rules/build-release.md](../rules/build-release.md) §2.10
 - [ ] `release/` 目录里旧的产物已清理或归档（CI `publish-release` 会自动清理；本地构建需手动清理）
 - [ ] `RELEASE_NOTES.md` 已更新
 - [ ] `CFBundleShortVersionString`（Info.plist）与 `build-all.sh` 的 `VERSION` 对齐（目前 1.0.0 vs 1.1.0 不一致，建议统一）

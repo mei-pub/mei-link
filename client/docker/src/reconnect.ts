@@ -83,7 +83,7 @@ export class ReconnectController {
 
   /** 执行一轮探测与可能的升级动作。可直接调用（测试用）。 */
   async check() {
-    if (this.state === "idle" || this.state === "failed") return;
+    if (this.state === "idle") return;
     if (this.checking || this.restartInFlight) return;
     this.checking = true;
     try {
@@ -92,6 +92,9 @@ export class ReconnectController {
         this.reset();
         return;
       }
+      // 已放弃（重启次数耗尽）：保留低频探测，连接自行恢复时自动解除"重连失败"，
+      // 但不再自动重启 frpc，避免无限重启风暴。
+      if (this.state === "failed") return;
       if (alive) {
         // 进程存活但未连上服务器：frpc 内部正在重试，这里只计数等待。
         this.reconnectFailures++;
@@ -129,8 +132,8 @@ export class ReconnectController {
     }
     if (this.restartFailures >= this.options.maxRestartAttempts) {
       this.setState("failed");
-      if (this.timer) { clearInterval(this.timer); this.timer = undefined; }
-      this.options.onLog?.("自动重连已放弃：重启次数耗尽，请检查服务器后手动点“连接”重试", "error");
+      // 保留周期探测（不清定时器）：连接自行恢复时由 check() 自动解除"重连失败"。
+      this.options.onLog?.("自动重连已放弃：重启次数耗尽，请检查服务器；连接恢复后会自动解除", "error");
       return;
     }
     // 未耗尽：回到重建连接阶段，等下一个周期再决定是否再次重启。
@@ -138,7 +141,7 @@ export class ReconnectController {
   }
 
   private reset() {
-    if (this.reconnectFailures > 0 || this.restartFailures > 0) this.options.onLog?.("连接已恢复", "info");
+    if (this.state === "failed" || this.reconnectFailures > 0 || this.restartFailures > 0) this.options.onLog?.("连接已恢复", "info");
     this.reconnectFailures = 0;
     this.restartFailures = 0;
     this.setState("active");
