@@ -105,6 +105,9 @@ echo ""
 
 # --- 3. Tauri build (Rust compile + bundle) ---
 echo ">>> Building Tauri app (this may take a few minutes)..."
+# tauri.conf.json 的 version 写死为 1.1.0，用 --config 合并覆盖为当前发布版本，
+# 让 .app 的 CFBundleShortVersionString / 关于页跟随发版版本号（不改源码文件）。
+TAURI_CONFIG_OVERRIDE="{\"version\":\"$APP_VERSION\"}"
 # On macOS, build the .app bundle only (no .dmg yet) so we can ad-hoc sign the
 # .app before wrapping it into a DMG. Tauri's default `tauri build` produces a
 # DMG from the unsigned .app and then cleans up the .app, leaving no chance to
@@ -112,9 +115,9 @@ echo ">>> Building Tauri app (this may take a few minutes)..."
 # the default `tauri build` to produce the platform's installer format
 # (.msi/.nsis on Windows, .deb/.AppImage on Linux) directly.
 if [ "$GOOS" = "darwin" ]; then
-    npx tauri build --bundles app
+    npx tauri build --bundles app --config "$TAURI_CONFIG_OVERRIDE"
 else
-    npx tauri build
+    npx tauri build --config "$TAURI_CONFIG_OVERRIDE"
 fi
 echo ""
 
