@@ -136,7 +136,15 @@ if [ "$GOOS" = "darwin" ]; then
         CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
         if [ -n "$CODESIGN_IDENTITY" ]; then
             echo ">>> Signing $APP_PATH with $CODESIGN_IDENTITY ..."
-            codesign --force --options runtime --sign "$CODESIGN_IDENTITY" "$APP_PATH" 2>&1 | tail -2
+            # 先签嵌套 frpc 二进制：公证要求包内所有可执行是 Developer ID 签名
+            # + 时间戳 + hardened runtime，linker-signed 会被 notarytool 拒
+            # （"not signed with a valid Developer ID certificate"）。
+            FRPC_BIN="$APP_PATH/Contents/Resources/frpc.exe"
+            if [ -f "$FRPC_BIN" ]; then
+                codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$FRPC_BIN" 2>/dev/null \
+                    || echo "  ! frpc.exe signing failed (notarization may reject; continuing)"
+            fi
+            codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_PATH" 2>&1 | tail -2
             if codesign --verify --deep --strict "$APP_PATH" 2>/dev/null; then
                 echo "  ✓ Developer ID signed"
             else

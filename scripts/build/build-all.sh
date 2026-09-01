@@ -167,11 +167,17 @@ if xcodebuild_available; then
                       build >/dev/null 2>&1; then
             APP_PATH="$(find "$NATIVE_BUILD" -name 'Meilink.app' -type d | head -1)"
             if [ -n "$APP_PATH" ]; then
-                # Developer ID 签名（有证书时）。frpc.exe 保持系统 linker-signed
-                # （macOS 15+ 链接器自动签名，重签会报 Operation not permitted）。
+                # Developer ID 签名（有证书时）。先签 frpc.exe（公证要求所有可执行
+                # 是 Developer ID 签名 + 时间戳 + hardened runtime）；本机安全代理
+                # 可能拦截 frpc 二进制写入，失败不阻塞。
                 CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
                 if [ -n "$CODESIGN_IDENTITY" ]; then
-                    codesign --force --options runtime --sign "$CODESIGN_IDENTITY" "$APP_PATH" && echo "  ✓ signed: $CODESIGN_IDENTITY"
+                    FRPC_BIN="$APP_PATH/Contents/MacOS/frpc.exe"
+                    if [ -f "$FRPC_BIN" ]; then
+                        codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$FRPC_BIN" 2>/dev/null \
+                            || echo "  ! frpc.exe signing failed (notarization may reject; continuing)"
+                    fi
+                    codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_PATH" && echo "  ✓ signed: $CODESIGN_IDENTITY"
                 fi
                 make_dmg "$APP_PATH" "$NATIVE_DMG"
                 echo "  ✓ $(basename "$NATIVE_DMG") (fresh build)"
@@ -226,10 +232,15 @@ if [ ! -f "$NATIVE_DMG" ]; then
               -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" \
               -c "Add :CFBundleIconFile string AppIcon" \
               "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
-            # Developer ID 签名（有证书时；frpc.exe 保持系统 linker-signed）
+            # Developer ID 签名（有证书时）；先签 frpc.exe（公证要求），本机拦截则跳过
             CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
             if [ -n "$CODESIGN_IDENTITY" ]; then
-                codesign --force --options runtime --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
+                FRPC_BIN="$APP_BUNDLE/Contents/MacOS/frpc.exe"
+                if [ -f "$FRPC_BIN" ]; then
+                    codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$FRPC_BIN" 2>/dev/null \
+                        || echo "  ! frpc.exe signing failed (notarization may reject; continuing)"
+                fi
+                codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
                 echo "  ✓ signed: $CODESIGN_IDENTITY"
             fi
             echo "  ✓ .app bundle built from Swift binary"

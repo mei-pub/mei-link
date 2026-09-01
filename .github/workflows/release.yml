@@ -216,11 +216,17 @@ jobs:
             -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" \
             "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
 
-          # Developer ID 签名（有证书时；无证书保持未签名以便 ad-hoc 检查）
+          # Developer ID 签名（有证书时；无证书保持未签名）。先签 frpc.exe：
+          # 公证要求包内所有可执行是 Developer ID 签名 + 时间戳 + hardened runtime，
+          # linker-signed 会被 notarytool 拒（"not signed with a valid Developer ID"）。
           CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
           if [ -n "$CODESIGN_IDENTITY" ]; then
             echo ">>> Signing with $CODESIGN_IDENTITY ..."
-            codesign --force --options runtime --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
+            FRPC_BIN="$APP_BUNDLE/Contents/MacOS/frpc.exe"
+            if [ -f "$FRPC_BIN" ]; then
+              codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$FRPC_BIN"
+            fi
+            codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
             codesign --verify --deep --strict "$APP_BUNDLE"
             echo "  ✓ signed"
           else
