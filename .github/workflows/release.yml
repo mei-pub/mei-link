@@ -425,6 +425,8 @@ jobs:
         # 矩阵只跑一次（server 实例），拉 client + server 两个镜像。
         if: matrix.name == 'server'
         continue-on-error: true
+        # docker pull 加速站可能无限挂起，best-effort 步骤不该拖住整个发布。
+        timeout-minutes: 3
         shell: bash
         run: |
           v="${{ steps.ver.outputs.APP_VERSION }}"
