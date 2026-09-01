@@ -234,10 +234,15 @@ flowchart TD
 > 连接自行恢复时自动解除**"重连失败"。进程意外退出直接进入重启。
 > **保活**：有配置即持续运行——容器/进程重启后自动连接（docker 启动时
 > `autoStartIfConfigured`；Swift 有 `startIfNeeded`；Go sidecar AutoStart 自动 Start）。
-> 阈值存于 `settings.json`（Swift/Go 共享）与 docker 的 `config.json`，可在设置中修改，
-> 使用点 clamp。重启最小间隔 = `reconnectInterval`（替代原硬编码 20s 冷却），被间隔
-> 挡下时只重排轮询定时器不做立即探测。断连期间轮询改用 `reconnectInterval` 间隔
-> （健康时用 `statusPollingInterval`）。Docker 客户端实现见 `client/docker/src/reconnect.ts`，
+> **多实例共享 frpc（接管）**：macOS 原生与桌面端共享同一数据目录/adminPort，多实例
+> 同时运行时不各自 spawn frpc（会端口冲突），而是后启动者探测 admin 端口已有 frpc
+> （凭据匹配）后直接**接管**其 Admin API（Swift `adoptExistingFrpcIfPresent` 对应
+> Go 的 `Start()` 接管分支）；接管模式下外部 frpc 消失时，自动重连会由本实例
+> spawn 自己的 frpc 接管（强生存态）。阈值存于 `settings.json`（Swift/Go 共享）与
+> docker 的 `config.json`，可在设置中修改，使用点 clamp。重启最小间隔 =
+> `reconnectInterval`（替代原硬编码 20s 冷却），被间隔挡下时只重排轮询定时器不做
+> 立即探测。断连期间轮询改用 `reconnectInterval` 间隔（健康时用
+> `statusPollingInterval`）。Docker 客户端实现见 `client/docker/src/reconnect.ts`，
 > Swift 见 `TunnelManager.recoverConnection`，Go 见 `desktop/sidecar/internal/tunnel/manager.go`。
 
 ## 7. 并发与线程模型

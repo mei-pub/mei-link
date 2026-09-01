@@ -27,6 +27,9 @@ class TunnelManager: ObservableObject {
     private var restartFailures = 0
     /// 最近一次重启时间，用于限制重启最小间隔。
     private var lastRestartAt: Date?
+    /// 是否拥有 frpc 进程。false = 接管了同数据目录下其他 Meilink 实例的 frpc
+    /// （不本地 spawn，直接通过 Admin API 管理共享 frpc）。
+    private var ownsFrpc = true
 
     // 两段式重连阈值（替代原硬编码 3 次失败 / 20 秒冷却），均来自可配置设置并在使用点 clamp。
     private var maxReconnectAttempts: Int { min(max(appSettings.maxReconnectAttempts, 1), 30) }
@@ -129,6 +132,12 @@ class TunnelManager: ObservableObject {
             return false
         }
 
+        // 多实例共享 frpc：本地无 frpc 进程时，若 admin 端口已有 frpc（同数据目录的
+        // 另一个 Meilink 实例在跑、凭据匹配），直接接管其 Admin API，避免端口冲突。
+        if !frpcProcess.isRunning, await adoptExistingFrpcIfPresent() {
+            return true
+        }
+
         addEvent("正在启动隧道管理器...")
 
         let toml = configGenerator.generate(serverConfig: config)
@@ -194,12 +203,41 @@ class TunnelManager: ObservableObject {
         await restart()
     }
 
+    /// 多实例共享 frpc：本地无 frpc 进程时，若 admin 端口已有 frpc（同数据目录的
+    /// 另一个 Meilink 实例在跑、凭据匹配），直接接管其 Admin API，不做本地 spawn。
+    /// 接管模式的保活：外部 frpc 消失后 pollStatus 会失败 → 自动重连 → 届时探测不到
+    /// 外部 frpc，本实例便 spawn 自己的 frpc，保证 frpc 始终在跑（强生存态）。
+    private func adoptExistingFrpcIfPresent() async -> Bool {
+        guard let config = serverConfig else { return false }
+        adminAPI = FrpcAdminAPI(port: config.adminPort, user: config.adminUser, password: config.adminPassword)
+        do {
+            // 用带认证的状态请求探测：frpc 在跑且凭据匹配才算可接管。
+            _ = try await adminAPI?.getStatus()
+            ownsFrpc = false
+            isFrpcRunning = true
+            isConnected = false
+            addEvent("检测到已有 frpc Admin API，已接管状态监控", level: .info)
+            startStatusPolling()
+            return true
+        } catch {
+            // 连接拒绝（无 frpc）或凭据不匹配：不接管，走正常 spawn。
+            ownsFrpc = true
+            return false
+        }
+    }
+
     func stop() async {
         statusTimer?.invalidate()
         statusTimer = nil
 
         resetReconnectState()
-        frpcProcess.stop()
+        if ownsFrpc {
+            frpcProcess.stop()
+        } else {
+            // 接管模式：本地无 frpc 进程，通过 Admin API 停共享 frpc。
+            try? await adminAPI?.stop()
+        }
+        ownsFrpc = true
         isFrpcRunning = false
         isConnected = false
 
@@ -215,6 +253,8 @@ class TunnelManager: ObservableObject {
         statusTimer = nil
 
         resetReconnectState()
+        // 接管模式本地无 frpc 进程，无需 kill；stopImmediately 同步执行无法等 Admin API。
+        ownsFrpc = true
         frpcProcess.stopImmediately()
         isFrpcRunning = false
         isConnected = false
@@ -271,6 +311,11 @@ class TunnelManager: ObservableObject {
     func restart() async {
         resetReconnectState()
         addEvent("开始深度重启...", level: .info)
+
+        // 多实例共享 frpc：本地无进程且 admin 端口已有 frpc → 直接接管，无需重启。
+        if !frpcProcess.isRunning, await adoptExistingFrpcIfPresent() {
+            return
+        }
 
         // 第1层：停止状态轮询
         statusTimer?.invalidate()
@@ -480,7 +525,9 @@ class TunnelManager: ObservableObject {
             return
         }
 
-        guard frpcProcess.isRunning else {
+        // 接管模式（ownsFrpc = false）没有本地 frpc 进程，进程存活检查跳过；
+        // 外部 frpc 消失时 getStatus 会失败，走下方 catch → 自动重连拉起。
+        if ownsFrpc, !frpcProcess.isRunning {
             isFrpcRunning = false
             await recordConnectivityFailure(reason: "frpc 进程已退出")
             return
