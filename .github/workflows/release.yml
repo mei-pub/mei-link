@@ -64,7 +64,7 @@ jobs:
       - name: Import Apple certificate (macOS, optional)
         # 有 Developer ID 证书时导入 keychain，build-desktop.sh 会用它给
         # .app 做 Developer ID 签名（无证书时回退 ad-hoc）。
-        if: runner.os == 'macOS' && env.CERTIFICATE_P12 != ''
+        if: runner.os == 'macOS' && secrets.CERTIFICATE_P12 != ''
         env:
           CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
           CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
@@ -147,7 +147,7 @@ jobs:
       - name: Import Apple certificate (optional)
         # 有 Developer ID 证书（secrets.CERTIFICATE_P12）时导入 keychain，
         # 用于对原生 .app 做 Developer ID 签名。
-        if: env.CERTIFICATE_P12 != ''
+        if: secrets.CERTIFICATE_P12 != ''
         env:
           CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
           CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
