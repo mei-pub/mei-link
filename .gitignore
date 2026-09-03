@@ -25,3 +25,4 @@ release/**/*.tar.gz
 release/**/*.oci.tar
 release/**/*.msi
 release/**/*.zip
+meilink-tunnel
