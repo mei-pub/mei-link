@@ -50,7 +50,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.22"
+          go-version: "1.25"
           cache-dependency-path: client/desktop/sidecar/go.sum
 
       - name: Setup Rust (Tauri)
@@ -116,10 +116,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup Go (for go-cross-compile of frpc if needed later)
+      - name: Setup Go (for building meilink-tunnel)
         uses: actions/setup-go@v6
         with:
-          go-version: "1.22"
+          go-version: "1.25"
           cache-dependency-path: client/desktop/sidecar/go.sum
 
       - name: Resolve version
@@ -186,11 +186,11 @@ jobs:
           # 复制二进制
           cp "$BIN_PATH" "$APP_BUNDLE/Contents/MacOS/Meilink"
 
-          # 下载 frpc。download-frpc.sh 用 Xcode 构建变量决定输出目录，
-          # SwiftPM 路径下这些变量未设，会解析成 /MacOS（只读）而失败。
-          # 显式导出指向 bundle，让 frpc 直接下到 .app/Contents/MacOS/。
+          # 构建 meilink-tunnel（嵌入 frp library 的独立二进制，替代 frpc）。
+          # build-engine.sh 用 Xcode 构建变量决定输出目录，SwiftPM 路径下
+          # 需要显式导出指向 bundle。
           BUILT_PRODUCTS_DIR="$APP_BUNDLE/Contents" CONTENTS_FOLDER_PATH="" \
-            bash scripts/assets/download-frpc.sh
+            bash scripts/build/build-engine.sh
 
           # 复制图标（先在 Resources 放好，Info.plist 再注册 CFBundleIconFile）
           if [ -f "client/macos-native/Resources/AppIcon.icns" ]; then
@@ -216,15 +216,15 @@ jobs:
             -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" \
             "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
 
-          # Developer ID 签名（有证书时；无证书保持未签名）。先签 frpc.exe：
+          # Developer ID 签名（有证书时；无证书保持未签名）。先签 meilink-tunnel：
           # 公证要求包内所有可执行是 Developer ID 签名 + 时间戳 + hardened runtime，
           # linker-signed 会被 notarytool 拒（"not signed with a valid Developer ID"）。
           CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
           if [ -n "$CODESIGN_IDENTITY" ]; then
             echo ">>> Signing with $CODESIGN_IDENTITY ..."
-            FRPC_BIN="$APP_BUNDLE/Contents/MacOS/frpc.exe"
-            if [ -f "$FRPC_BIN" ]; then
-              codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$FRPC_BIN"
+            ENGINE_BIN="$APP_BUNDLE/Contents/MacOS/meilink-tunnel"
+            if [ -f "$ENGINE_BIN" ]; then
+              codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$ENGINE_BIN"
             fi
             codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
             codesign --verify --deep --strict "$APP_BUNDLE"
@@ -328,12 +328,14 @@ jobs:
       matrix:
         include:
           - name: client
-            context: client/docker
+            context: .
+            dockerfile: client/docker/Dockerfile
             image: meilink-client
             oci: meilink-docker-client
             dest: release/client/docker
           - name: server
             context: server/docker-managed
+            dockerfile: server/docker-managed/Dockerfile
             image: meilink-server
             oci: meilink-server
             dest: release/server
@@ -397,6 +399,7 @@ jobs:
           DOCKER_BUILD_RECORD_UPLOAD: "false"
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
@@ -415,6 +418,7 @@ jobs:
           mkdir -p "${{ matrix.dest }}"
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
+            --file "${{ matrix.dockerfile }}" \
             --output type=oci,dest="$GITHUB_WORKSPACE/${{ matrix.dest }}/${{ matrix.oci }}-${{ steps.ver.outputs.APP_VERSION }}.oci.tar" \
             "${{ matrix.context }}"
           ls -lh "${{ matrix.dest }}/"

@@ -13,13 +13,13 @@ LABEL org.opencontainers.image.source="https://github.com/tomtrije/mei-link"
 
 WORKDIR /app
 COPY --from=engine-builder /usr/local/bin/meilink-tunnel /usr/local/bin/meilink-tunnel
-COPY src ./src
-COPY web ./web
-COPY package.json ./
+COPY client/docker/src ./src
+COPY client/docker/web ./web
+COPY client/docker/package.json ./
 RUN adduser -D -u 10001 meilink && mkdir /data && chown meilink /data \
     && apk add --no-cache su-exec
 
-COPY docker-entrypoint.sh ./
+COPY client/docker/docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
 # 注意：不设 USER meilink —— entrypoint 需以 root 启动来 chown 挂载卷，
