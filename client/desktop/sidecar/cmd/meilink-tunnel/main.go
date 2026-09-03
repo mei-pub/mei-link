@@ -68,7 +68,7 @@ func runEngine() error {
 		AdminPort:     common.WebServer.Port,
 		AdminUser:     common.WebServer.User,
 		AdminPassword: common.WebServer.Password,
-		StorePath:     "",
+		StorePath:     common.Store.Path,
 		LogLevel:      common.Log.Level,
 	}
 
