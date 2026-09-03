@@ -30,6 +30,11 @@ var rootCmd = &cobra.Command{
 	Use:   "meilink-tunnel",
 	Short: "Meilink tunnel engine (embedded frp client)",
 	Version: version,
+	// When invoked without a subcommand (e.g. "meilink-tunnel -c frpc.toml",
+	// matching frpc's CLI convention), default to running the engine.
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runEngine()
+	},
 }
 
 var runCmd = &cobra.Command{
@@ -100,6 +105,8 @@ func runEngine() error {
 }
 
 func init() {
+	// Accept frpc-compatible shorthand: meilink-tunnel -c frpc.toml
+	rootCmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to frpc.toml configuration file")
 	runCmd.Flags().StringVar(&configPath, "config", "", "Path to frpc.toml configuration file")
 	_ = runCmd.MarkFlagRequired("config")
 	rootCmd.AddCommand(runCmd)
