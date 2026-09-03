@@ -21,6 +21,12 @@ else
     exit 1
 fi
 
+# Resolve OUTPUT_DIR to an absolute path NOW (before cd) so relative paths
+# passed by CI (e.g. "build/Meilink.app/Contents") resolve from the caller's
+# working directory, not from the sidecar directory we cd into below.
+mkdir -p "$OUTPUT_DIR"
+OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
+
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 SIDECAR_DIR="$ROOT_DIR/client/desktop/sidecar"
 
