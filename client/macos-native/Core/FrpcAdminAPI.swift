@@ -15,7 +15,7 @@ enum FrpcError: Error, LocalizedError {
         case .createFailed(let code): return "创建代理失败 (HTTP \(code))"
         case .updateFailed: return "更新代理失败"
         case .deleteFailed: return "删除代理失败"
-        case .stopFailed: return "停止 frpc 失败"
+        case .stopFailed: return "停止 tunnel 失败"
         case .reloadFailed: return "重载配置失败"
         case .networkError(let err): return "网络错误: \(err.localizedDescription)"
         }

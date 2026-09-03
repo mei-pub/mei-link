@@ -73,13 +73,13 @@ class FrpcProcess {
         process?.terminationHandler = { [weak self] process in
             DispatchQueue.main.async {
                 let intentional = self?.consumeIntentionalStop() ?? false
-                self?.logger.info("frpc 进程已退出，状态码: \(process.terminationStatus)，主动停止: \(intentional)")
+                self?.logger.info("tunnel 进程已退出，状态码: \(process.terminationStatus)，主动停止: \(intentional)")
                 self?.onTermination?(process.terminationStatus, intentional)
             }
         }
 
         try process?.run()
-        logger.info("frpc 进程已启动，PID: \(process?.processIdentifier ?? 0)")
+        logger.info("tunnel 进程已启动，PID: \(process?.processIdentifier ?? 0)")
         // 进程启动成功后立即回调（在主线程上）
         DispatchQueue.main.async { [weak self] in
             self?.onStarted?()
@@ -95,11 +95,11 @@ class FrpcProcess {
         for line in lines {
             switch level {
             case .info:
-                logger.info("frpc: \(line)")
+                logger.info("tunnel: \(line)")
             case .warning:
-                logger.warning("frpc: \(line)")
+                logger.warning("tunnel: \(line)")
             case .error:
-                logger.error("frpc stderr: \(line)")
+                logger.error("tunnel stderr: \(line)")
             }
             DispatchQueue.main.async { [weak self] in
                 self?.onOutput?(line)
@@ -171,7 +171,7 @@ class FrpcProcess {
                 Thread.sleep(forTimeInterval: 0.5)
                 if process.isRunning {
                     let exitPid = pid ?? 0
-                    logger.warning("frpc 进程未能退出，使用 kill -9 强制终止")
+                    logger.warning("tunnel 进程未能退出，使用 kill -9 强制终止")
                     let task = Process()
                     task.executableURL = URL(fileURLWithPath: "/usr/bin/kill")
                     task.arguments = ["-9", "\(exitPid)"]

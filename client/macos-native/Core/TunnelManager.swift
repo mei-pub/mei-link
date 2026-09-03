@@ -40,7 +40,7 @@ class TunnelManager: ObservableObject {
 
     init() {
         frpcProcess.onOutput = { [weak self] line in
-            self?.addEvent("frpc: \(line)")
+            self?.addEvent("tunnel: \(line)")
         }
         frpcProcess.onTermination = { [weak self] status, intentional in
             guard let self else { return }
@@ -51,20 +51,20 @@ class TunnelManager: ObservableObject {
             for idx in self.tunnels.indices {
                 if self.tunnels[idx].enabled {
                     self.tunnels[idx].status = .closed
-                    self.tunnels[idx].errorMessage = "frpc 进程已退出，状态码: \(status)"
+                    self.tunnels[idx].errorMessage = "tunnel 进程已退出，状态码: \(status)"
                 }
             }
             // 主动停止（stop/stopImmediately/recoverConnection 内的 kill）不算崩溃，
             // 状态码非 0 只是被终止信号所携带的值，不应触发自动恢复，否则会形成 kill→恢复→kill 死循环。
             let isCrash = !intentional && status != 0
-            self.addEvent("frpc 进程已退出，状态码: \(status)", level: isCrash ? .error : .info)
+            self.addEvent("tunnel 进程已退出，状态码: \(status)", level: isCrash ? .error : .info)
 
             // 自动重启：仅当 frpc 真正异常退出（非主动停止且状态码非 0）时才尝试重启
             if isCrash {
                 if !self.reconnectFailed { self.isReconnecting = true }
                 Task { @MainActor in
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    await self.recoverConnection(reason: "frpc 异常退出，正在自动重启")
+                    await self.recoverConnection(reason: "tunnel 异常退出，正在自动重启")
                 }
             }
         }
@@ -147,7 +147,7 @@ class TunnelManager: ObservableObject {
             isFrpcRunning = true
             isConnected = false
         } catch {
-            addEvent("启动 frpc 失败: \(error.localizedDescription)", level: .error)
+            addEvent("启动 tunnel 失败: \(error.localizedDescription)", level: .error)
             return false
         }
 
@@ -328,7 +328,7 @@ class TunnelManager: ObservableObject {
 
             // 如果 frpc 仍未退出，用 kill -9 强制终止
             if frpcProcess.isRunning, let pid = frpcProcess.processID {
-                addEvent("frpc 进程未能退出，尝试强制终止", level: .warning)
+                addEvent("tunnel 进程未能退出，尝试强制终止", level: .warning)
                 let task = Process()
                 task.executableURL = URL(fileURLWithPath: "/usr/bin/kill")
                 task.arguments = ["-9", "\(pid)"]
@@ -352,7 +352,7 @@ class TunnelManager: ObservableObject {
             let configPath = try configGenerator.writeToFile(toml)
             try frpcProcess.start(configPath: configPath)
         } catch {
-            addEvent("重启 frpc 失败: \(error.localizedDescription)", level: .error)
+            addEvent("重启 tunnel 失败: \(error.localizedDescription)", level: .error)
             return
         }
         isFrpcRunning = true
@@ -529,7 +529,7 @@ class TunnelManager: ObservableObject {
         // 外部 frpc 消失时 getStatus 会失败，走下方 catch → 自动重连拉起。
         if ownsFrpc, !frpcProcess.isRunning {
             isFrpcRunning = false
-            await recordConnectivityFailure(reason: "frpc 进程已退出")
+            await recordConnectivityFailure(reason: "tunnel 进程已退出")
             return
         }
 
@@ -543,7 +543,7 @@ class TunnelManager: ObservableObject {
                     tunnels[idx] = tunnel.updatedStatus(from: status)
                 } else if tunnel.enabled {
                     tunnels[idx].status = .checkFailed
-                    tunnels[idx].errorMessage = "frpc 未返回该隧道状态"
+                    tunnels[idx].errorMessage = "tunnel 未返回该隧道状态"
                 }
             }
 
@@ -641,7 +641,7 @@ class TunnelManager: ObservableObject {
         isRecovering = true
         lastRestartAt = Date()
         isReconnecting = true
-        addEvent("连接连续异常，正在重启 frpc: \(reason)", level: .warning)
+        addEvent("连接连续异常，正在重启 tunnel: \(reason)", level: .warning)
 
         statusTimer?.invalidate()
         statusTimer = nil
@@ -656,7 +656,7 @@ class TunnelManager: ObservableObject {
         restartFailures += 1
         let ok = await start(force: true)
         if ok {
-            addEvent("frpc 重启成功，连接已恢复", level: .info)
+            addEvent("tunnel 重启成功，连接已恢复", level: .info)
             restartFailures = 0
         } else {
             addEvent("第 \(restartFailures)/\(maxRestartAttempts) 次重启失败", level: .error)

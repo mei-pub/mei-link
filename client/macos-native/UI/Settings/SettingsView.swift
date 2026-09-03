@@ -66,10 +66,10 @@ struct SettingsView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("退出后会停止当前 frpc 隧道，菜单栏入口也会消失。")
+            Text("退出后会停止当前隧道，菜单栏入口也会消失。")
         }
         .confirmationDialog(
-            "保存后是否立即重启 frpc 隧道？",
+            "保存后是否立即重启隧道？",
             isPresented: $showRestartConfirmation,
             titleVisibility: .visible
         ) {
@@ -80,7 +80,7 @@ struct SettingsView: View {
                 finishSave()
             }
         } message: {
-            Text("配置已写入。重启 frpc 让新配置立即生效；仅保存则下次启动时生效。")
+            Text("配置已写入。重启隧道让新配置立即生效；仅保存则下次启动时生效。")
         }
     }
 
@@ -149,7 +149,7 @@ struct SettingsView: View {
             settingsRow("TLS 连接") {
                 Toggle("", isOn: $tlsEnabled)
                     .labelsHidden()
-                Text("加密 frpc 到 frps 的控制连接，不等同于 HTTPS 隧道。")
+                Text("加密客户端到服务端 的控制连接，不等同于 HTTPS 隧道。")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -251,7 +251,7 @@ struct SettingsView: View {
                     updateMaxReconnectAttempts(newValue)
                 }
 
-                Text("重建连接连续失败 N 次后重启 frpc。")
+                Text("重建连接连续失败 N 次后重启隧道。")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
