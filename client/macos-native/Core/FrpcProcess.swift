@@ -189,7 +189,7 @@ enum FrpcProcessError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .binaryNotFound: return "未找到 frpc 二进制文件"
+        case .binaryNotFound: return "未找到 meilink-tunnel 二进制文件"
         }
     }
 }
