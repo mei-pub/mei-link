@@ -14,8 +14,8 @@ build/Meilink.app/
 Meilink.xcodeproj/
 .worktrees/
 
-# Local build artifacts
-build/
+# Local build artifacts (root-anchored so scripts/build/ is still tracked)
+/build/
 cross-platform-client/
 release/rebuild-20260802/
 
