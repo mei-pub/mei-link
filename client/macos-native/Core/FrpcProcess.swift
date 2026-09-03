@@ -114,28 +114,22 @@ class FrpcProcess {
             return nil
         }
 
-        let siblingPath = executableDirectory.appendingPathComponent("frpc").path
-        if FileManager.default.isExecutableFile(atPath: siblingPath) {
-            logger.info("找到 frpc: \(siblingPath)")
-            return siblingPath
+        // meilink-tunnel 是嵌入 frp library 的独立二进制，替代 frpc 以规避杀软误报。
+        let tunnelPath = executableDirectory.appendingPathComponent("meilink-tunnel").path
+        if FileManager.default.isExecutableFile(atPath: tunnelPath) {
+            logger.info("找到 meilink-tunnel: \(tunnelPath)")
+            return tunnelPath
         }
 
-        // frpc.exe 兼容：与桌面端打包命名一致，也规避部分安全代理删除名为 "frpc" 的未签名新文件。
-        let exePath = executableDirectory.appendingPathComponent("frpc.exe").path
-        if FileManager.default.isExecutableFile(atPath: exePath) {
-            logger.info("找到 frpc: \(exePath)")
-            return exePath
-        }
-
-        logger.warning("frpc 不在同目录: \(siblingPath)")
+        logger.warning("meilink-tunnel 不在同目录")
 
         // 回退到 Resources/ 目录
-        if let resourcePath = Bundle.main.path(forResource: "frpc", ofType: nil) {
-            logger.info("在 Resources 中找到 frpc: \(resourcePath)")
+        if let resourcePath = Bundle.main.path(forResource: "meilink-tunnel", ofType: nil) {
+            logger.info("在 Resources 中找到 meilink-tunnel: \(resourcePath)")
             return resourcePath
         }
 
-        logger.error("frpc 二进制未找到")
+        logger.error("meilink-tunnel 二进制未找到")
         return nil
     }
 

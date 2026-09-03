@@ -39,7 +39,7 @@ targets:
         ENABLE_HARDENED_RUNTIME: true
         COMBINE_HIDPI_IMAGES: true
     preBuildScripts:
-      - name: Download frpc
+      - name: Build meilink-tunnel
         script: |
-          bash "${SRCROOT}/scripts/assets/download-frpc.sh"
+          bash "${SRCROOT}/scripts/build/build-engine.sh"
         runOnlyWhenInstalling: false

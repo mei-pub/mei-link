@@ -167,15 +167,15 @@ if xcodebuild_available; then
                       build >/dev/null 2>&1; then
             APP_PATH="$(find "$NATIVE_BUILD" -name 'Meilink.app' -type d | head -1)"
             if [ -n "$APP_PATH" ]; then
-                # Developer ID 签名（有证书时）。先签 frpc.exe（公证要求所有可执行
+                # Developer ID 签名（有证书时）。先签 meilink-tunnel（公证要求所有可执行
                 # 是 Developer ID 签名 + 时间戳 + hardened runtime）；本机安全代理
-                # 可能拦截 frpc 二进制写入，失败不阻塞。
+                # 可能拦截新二进制写入，失败不阻塞。
                 CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
                 if [ -n "$CODESIGN_IDENTITY" ]; then
-                    FRPC_BIN="$APP_PATH/Contents/MacOS/frpc.exe"
-                    if [ -f "$FRPC_BIN" ]; then
-                        codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$FRPC_BIN" 2>/dev/null \
-                            || echo "  ! frpc.exe signing failed (notarization may reject; continuing)"
+                    ENGINE_BIN="$APP_PATH/Contents/MacOS/meilink-tunnel"
+                    if [ -f "$ENGINE_BIN" ]; then
+                        codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$ENGINE_BIN" 2>/dev/null \
+                            || echo "  ! meilink-tunnel signing failed (notarization may reject; continuing)"
                     fi
                     codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_PATH" && echo "  ✓ signed: $CODESIGN_IDENTITY"
                 fi
@@ -200,14 +200,9 @@ if [ ! -f "$NATIVE_DMG" ]; then
             rm -rf "$APP_BUNDLE"
             mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
             cp "$SWIFT_BIN_DIR/Meilink" "$APP_BUNDLE/Contents/MacOS/Meilink"
-            # Download frpc into the bundle. download-frpc.sh derives its output
-            # dir from Xcode build vars (BUILT_PRODUCTS_DIR / CONTENTS_FOLDER_PATH);
-            # in the SwiftPM fallback path those aren't set, so we export them to
-            # point at the bundle we just created. Without this, OUTPUT_DIR resolves
-            # to "/MacOS" and the script fails silently (no frpc in the .app).
+            # Build meilink-tunnel into the bundle (replaces the old frpc download).
             if BUILT_PRODUCTS_DIR="$APP_BUNDLE/Contents" \
-               CONTENTS_FOLDER_PATH="" \
-               bash "$ROOT_DIR/scripts/assets/download-frpc.sh" >/dev/null 2>&1; then
+               bash "$ROOT_DIR/scripts/build/build-engine.sh" >/dev/null 2>&1; then
                 :
             fi
             # Copy icons if available
@@ -232,13 +227,13 @@ if [ ! -f "$NATIVE_DMG" ]; then
               -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" \
               -c "Add :CFBundleIconFile string AppIcon" \
               "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || true
-            # Developer ID 签名（有证书时）；先签 frpc.exe（公证要求），本机拦截则跳过
+            # Developer ID 签名（有证书时）；先签 meilink-tunnel（公证要求），本机拦截则跳过
             CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
             if [ -n "$CODESIGN_IDENTITY" ]; then
-                FRPC_BIN="$APP_BUNDLE/Contents/MacOS/frpc.exe"
-                if [ -f "$FRPC_BIN" ]; then
-                    codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$FRPC_BIN" 2>/dev/null \
-                        || echo "  ! frpc.exe signing failed (notarization may reject; continuing)"
+                ENGINE_BIN="$APP_BUNDLE/Contents/MacOS/meilink-tunnel"
+                if [ -f "$ENGINE_BIN" ]; then
+                    codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$ENGINE_BIN" 2>/dev/null \
+                        || echo "  ! meilink-tunnel signing failed (notarization may reject; continuing)"
                 fi
                 codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
                 echo "  ✓ signed: $CODESIGN_IDENTITY"

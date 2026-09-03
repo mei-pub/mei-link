@@ -1,24 +1,18 @@
+# Build stage: compile meilink-tunnel (embedded frp library) from source.
+# Replaces the old frpc binary download — AV software frequently quarantines
+# the well-known frpc binary name, while a self-built project-specific binary
+# avoids hash-based and name-based signature matches.
+FROM golang:1.25-alpine AS engine-builder
+COPY client/desktop/sidecar/ /sidecar/
+RUN cd /sidecar && CGO_ENABLED=0 go build -o /usr/local/bin/meilink-tunnel ./cmd/meilink-tunnel/
+
 FROM node:22-alpine
 
 # GHCR 用该 label 把 package 与源仓库绑定，确保 GITHUB_TOKEN 有 push 权限
 LABEL org.opencontainers.image.source="https://github.com/tomtrije/mei-link"
 
-ARG TARGETARCH
-ARG FRP_VERSION=0.70.0
-RUN set -eux; \
-    case "${TARGETARCH}" in \
-      amd64) FRP_SHA256=281cb31e6b915113179c6ebb65b5977a5d9d7fb96f9a70867be83dee3b657721 ;; \
-      arm64) FRP_SHA256=9dd282fd8d1b90a8ee760702ac5b876748b519c6bdfac7c68418f62a05d805c6 ;; \
-      *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    apk add --no-cache curl tar; \
-    curl --fail --location --show-error --silent --retry 5 --retry-all-errors --retry-delay 2 -o /tmp/frp.tgz "https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/frp_${FRP_VERSION}_linux_${TARGETARCH}.tar.gz"; \
-    echo "${FRP_SHA256}  /tmp/frp.tgz" | sha256sum -c -; \
-    tar -xzf /tmp/frp.tgz --strip-components=1 -C /usr/local/bin "frp_${FRP_VERSION}_linux_${TARGETARCH}/frpc"; \
-    rm /tmp/frp.tgz; \
-    frpc --version
-
 WORKDIR /app
+COPY --from=engine-builder /usr/local/bin/meilink-tunnel /usr/local/bin/meilink-tunnel
 COPY src ./src
 COPY web ./web
 COPY package.json ./
@@ -31,7 +25,7 @@ RUN chmod +x docker-entrypoint.sh
 # 注意：不设 USER meilink —— entrypoint 需以 root 启动来 chown 挂载卷，
 # 随后用 su-exec 降权为 meilink 运行 node 服务。
 ENV MEILINK_DATA_DIR=/data \
-    MEILINK_FRPC_PATH=/usr/local/bin/frpc \
+    MEILINK_FRPC_PATH=/usr/local/bin/meilink-tunnel \
     MEILINK_WEB_PORT=17420 \
     MEILINK_ADMIN_USER=admin \
     MEILINK_ADMIN_PASSWORD=

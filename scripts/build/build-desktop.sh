@@ -70,31 +70,10 @@ CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" \
 echo "  ✓ sidecar: $SIDECAR_NAME"
 echo ""
 
-# --- 1a. Download the matching frpc binary as a bundled application resource ---
-# The desktop app passes this file to the Go sidecar explicitly via
-# MEILINK_FRPC_BIN. It must be present in the installer so first-run setup
-# and saving settings do not depend on an internet connection.
-FRP_VERSION="${FRP_VERSION:-v0.70.0}"
-FRPC_RESOURCE_DIR="$DESKTOP_DIR/src-tauri/resources"
-FRPC_RESOURCE="$FRPC_RESOURCE_DIR/frpc.exe"
-FRPC_ARCHIVE_EXT=".tar.gz"
-[ "$GOOS" = "windows" ] && FRPC_ARCHIVE_EXT=".zip"
-FRPC_ARCHIVE="frp_${FRP_VERSION#v}_${GOOS}_${GOARCH}${FRPC_ARCHIVE_EXT}"
-FRPC_URL="https://github.com/fatedier/frp/releases/download/${FRP_VERSION}/${FRPC_ARCHIVE}"
-FRPC_TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$FRPC_TMP_DIR"' EXIT
-
-echo ">>> Downloading bundled frpc ${FRP_VERSION}..."
-mkdir -p "$FRPC_RESOURCE_DIR"
-curl --fail --location --retry 3 "$FRPC_URL" -o "$FRPC_TMP_DIR/$FRPC_ARCHIVE"
-if [ "$GOOS" = "windows" ]; then
-    unzip -p "$FRPC_TMP_DIR/$FRPC_ARCHIVE" "*/frpc.exe" > "$FRPC_RESOURCE"
-else
-    extract_tar_member "$FRPC_TMP_DIR/$FRPC_ARCHIVE" "frpc" > "$FRPC_RESOURCE"
-fi
-chmod +x "$FRPC_RESOURCE"
-echo "  frpc resource: $FRPC_RESOURCE"
-echo ""
+# --- 1a. frpc binary no longer needed ---
+# The desktop sidecar now embeds the frp client library directly (internal/engine).
+# No external frpc binary is downloaded or bundled, eliminating antivirus false
+# positives from the well-known frpc binary name.
 
 # --- 2. npm install + frontend build ---
 echo ">>> Building frontend..."
@@ -135,13 +114,13 @@ if [ "$GOOS" = "darwin" ]; then
     fi
     if [ -d "$APP_PATH" ]; then
         # 有 Developer ID 证书时做正式签名；无证书保持 ad-hoc。
-        # frpc.exe 保持系统 linker-signed（macOS 15+），不单独重签。
+        # 无独立 frpc 二进制；sidecar 内嵌 frp library 不需要单独签名。
         CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/Developer ID Application/ {print $2; exit}')"
         if [ -n "$CODESIGN_IDENTITY" ]; then
             echo ">>> Signing $APP_PATH with $CODESIGN_IDENTITY ..."
             # 公证要求包内所有 Mach-O 可执行都是 Developer ID 签名 + 时间戳 +
             # hardened runtime。Tauri 的 .app 含多个可执行（Go sidecar、
-            # frpc.exe、主二进制），遗漏任何一个 notarytool 都会拒
+            # 主二进制），遗漏任何一个 notarytool 都会拒
             # （"not signed with a valid Developer ID certificate"）。
             while IFS= read -r bin; do
                 codesign --force --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$bin" 2>/dev/null \

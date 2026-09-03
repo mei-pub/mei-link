@@ -300,22 +300,10 @@ pub fn run() {
                 "--config-dir".to_string(),
                 sidecar_data_dir.to_string_lossy().into_owned(),
             ];
-            // frpc is bundled as an application resource and deliberately
-            // passed by absolute path. The Go sidecar must never rely on a
-            // network download or Windows install-directory conventions.
-            let frpc_path = app.path().resource_dir()?.join("frpc.exe");
-            if !frpc_path.is_file() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("bundled frpc binary not found at {}", frpc_path.display()),
-                )
-                .into());
-            }
             let (_rx, child) = app
                 .shell()
                 .sidecar("meilink")?
                 .args(sidecar_args)
-                .env("MEILINK_FRPC_BIN", frpc_path.to_string_lossy().into_owned())
                 .spawn()?;
             app.state::<SidecarState>().0.lock().unwrap().replace(child);
             wait_for_sidecar(app.handle().clone());

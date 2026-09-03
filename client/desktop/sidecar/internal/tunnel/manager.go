@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/meilink/desktop-sidecar/internal/config"
+	"github.com/meilink/desktop-sidecar/internal/engine"
 	"github.com/meilink/desktop-sidecar/internal/frpc"
 )
 
@@ -22,7 +23,7 @@ const (
 // automatic reconnect, and an event log surfaced via the Web UI.
 type Manager struct {
 	cfg      *config.Manager
-	frpc     *frpc.Process
+	engine   *engine.Engine
 	adminAPI *frpc.AdminAPI
 	probe    *frpc.ReachabilityProbe
 
@@ -82,75 +83,12 @@ func NewManager(cfgDir string) (*Manager, error) {
 
 	m := &Manager{
 		cfg:      cfgMgr,
-		frpc:     frpc.NewProcess(""),
 		probe:    frpc.NewReachabilityProbe(),
 		tunnels:  tunnels,
 		settings: s,
 		logger:   log.Default(),
 		ctx:      ctx,
 		cancel:   cancel,
-	}
-
-	// Desktop bundles pass the exact frpc path through MEILINK_FRPC_BIN. Use
-	// it before the legacy download fallback so saving settings never depends
-	// on GitHub access (particularly important for packaged Windows builds).
-	if bundledPath := frpc.ResolveBinPath(); bundledPath != "" {
-		m.frpc = frpc.NewProcess(bundledPath)
-	} else {
-		dl := frpc.NewDownloader()
-		// 使用配置管理器的实际数据目录（macOS 上可能是 Application Support）
-		dataDir := filepath.Dir(m.cfg.FrpcConfigPath())
-		binPath, err := dl.EnsureFrpc(dataDir)
-		if err != nil {
-			log.Printf("warning: could not ensure frpc binary: %v", err)
-		} else {
-			m.frpc = frpc.NewProcess(binPath)
-		}
-	}
-
-	// Wire frpc process callbacks. OnTermination triggers automatic recovery
-	// when frpc exits abnormally (non-zero status); OnOutput forwards each
-	// stdout/stderr line into the event log as "frpc: <line>". Mirrors Swift
-	// FrpcProcess.onTermination / onOutput.
-	m.frpc.OnOutput = func(line string) {
-		m.addEvent("frpc: "+line, "info")
-	}
-	m.frpc.OnTermination = func(status int, intentional bool) {
-		m.mu.Lock()
-		m.isFrpcRunning = false
-		m.isConnected = false
-		m.ownsFrpc = false
-		m.stopStatusPolling()
-		for i := range m.tunnels {
-			if m.tunnels[i].Enabled {
-				m.tunnels[i].RuntimeStatus = string(config.StatusClosed)
-				m.tunnels[i].ErrorMessage = fmt.Sprintf("frpc 进程已退出，状态码: %d", status)
-			}
-		}
-		m.mu.Unlock()
-		// 主动停止（Stop/StopImmediately/recoverConnection 内的 kill）不算崩溃：
-		// 被终止信号杀掉的进程状态码非 0，但那只是信号值，不应触发自动恢复，
-		// 否则会形成 kill→恢复→kill 死循环。与 Swift 实现对齐。
-		isCrash := !intentional && status != 0
-		level := "info"
-		if isCrash {
-			level = "error"
-		}
-		m.addEvent(fmt.Sprintf("frpc 进程已退出，状态码: %d", status), level)
-
-		// Auto-recover only on a genuine crash (non-intentional && status != 0).
-		// An intentional stop (status carries a signal value) must not recover.
-		if isCrash {
-			m.mu.Lock()
-			if !m.reconnectFailed {
-				m.isReconnecting = true
-			}
-			m.mu.Unlock()
-			go func() {
-				time.Sleep(2 * time.Second) // 防抖，与 Swift 对齐
-				m.recoverConnection(fmt.Sprintf("frpc 异常退出（状态码 %d），正在自动重启", status))
-			}()
-		}
 	}
 
 	return m, nil
@@ -187,8 +125,9 @@ func (m *Manager) IsReconnectFailed() bool {
 	return m.reconnectFailed
 }
 
-// PID returns the current frpc process ID, or 0 if not running.
-func (m *Manager) PID() int { return m.frpc.PID() }
+// PID returns 0: the tunnel engine runs in-process and has no OS PID.
+// The web UI hides the PID field when it is 0.
+func (m *Manager) PID() int { return 0 }
 
 // Settings returns the current app settings.
 func (m *Manager) Settings() *config.AppSettings {
@@ -486,20 +425,42 @@ func (m *Manager) Start() error {
 	if err := m.cfg.GenerateFrpcToml(serverCfg, m.copyTunnelsLocked()); err != nil {
 		return err
 	}
-	configPath := m.cfg.FrpcConfigPath()
-	if err := m.frpc.Start(m.ctx, configPath); err != nil {
-		m.addEvent(fmt.Sprintf("启动 frpc 失败: %v", err), "error")
+	// Build engine config from server config and tunnels.
+	dataDir := filepath.Dir(m.cfg.FrpcConfigPath())
+	eng := engine.New(engine.EngineConfig{
+		ServerAddr:    serverCfg.ServerAddr,
+		ServerPort:    serverCfg.ServerPort,
+		AuthToken:     serverCfg.AuthToken,
+		TLSEnabled:    serverCfg.TLSEnabled,
+		AdminAddr:     "127.0.0.1",
+		AdminPort:     serverCfg.AdminPort,
+		AdminUser:     serverCfg.AdminUser,
+		AdminPassword: serverCfg.AdminPassword,
+		StorePath:     filepath.Join(dataDir, "store.json"),
+		LogLevel:      "info",
+	})
+	// Pre-load enabled proxies into the config source so frp starts with them.
+	proxies := engine.TunnelsToConfigurers(m.copyTunnelsLocked(), serverCfg)
+	if err := eng.SetProxies(proxies); err != nil {
+		m.addEvent(fmt.Sprintf("设置隧道失败: %v", err), "error")
 		return err
 	}
+	if err := eng.Start(m.ctx); err != nil {
+		m.addEvent(fmt.Sprintf("启动 tunnel engine 失败: %v", err), "error")
+		return err
+	}
+	// Watch for engine exit in a background goroutine (replaces process OnTermination).
+	go m.watchEngineExit(eng)
 
 	m.mu.Lock()
 	m.isFrpcRunning = true
 	m.ownsFrpc = true
+	m.engine = eng
 	m.mu.Unlock()
 
 	if err := m.waitForAdminAPI(); err != nil {
 		m.addEvent(fmt.Sprintf("Admin API 未就绪，启动未完成: %v", err), "error")
-		m.frpc.StopImmediately()
+		eng.Stop()
 		m.mu.Lock()
 		m.isFrpcRunning = false
 		m.ownsFrpc = false
@@ -507,37 +468,8 @@ func (m *Manager) Start() error {
 		return err
 	}
 
-	// Restore proxies.
-	m.mu.RLock()
-	tunnels := make([]config.Tunnel, len(m.tunnels))
-	copy(tunnels, m.tunnels)
-	m.mu.RUnlock()
-
-	restored := false
-	var failures []string
-	for _, t := range tunnels {
-		if !t.Enabled {
-			continue
-		}
-		if err := m.adminAPI.CreateProxy(m.ctx, t.ToProxyDefinition(serverCfg)); err != nil {
-			if frpc.IsHTTPConflict(err) {
-				restored = true
-				continue
-			}
-			failures = append(failures, t.Name)
-			m.addEvent(fmt.Sprintf("恢复隧道 %q 失败: %v", t.Name, err), "warning")
-		} else {
-			restored = true
-		}
-	}
-	if restored {
-		if err := m.adminAPI.Reload(m.ctx); err != nil {
-			m.addEvent(fmt.Sprintf("重载隧道配置失败: %v", err), "warning")
-		}
-	}
-	if len(failures) > 0 {
-		m.addEvent(fmt.Sprintf("部分隧道恢复失败，等待自动重连: %s", joinNames(failures)), "warning")
-	}
+	// Proxies are pre-loaded into the config source; no per-proxy
+	// CreateProxy/Reload needed (unlike the external frpc binary path).
 
 	m.startStatusPolling()
 	m.addEvent("隧道管理器已启动，正在检测外部可达性", "info")
@@ -554,8 +486,13 @@ func (m *Manager) Stop() {
 	adminAPI := m.adminAPI
 	m.mu.RUnlock()
 	if wasRunning {
-		if ownsFrpc && m.frpc.IsRunning() {
-			m.frpc.Stop(5 * time.Second)
+		if ownsFrpc {
+			m.mu.RLock()
+			eng := m.engine
+			m.mu.RUnlock()
+			if eng != nil && eng.IsRunning() {
+				eng.Stop()
+			}
 		} else if !ownsFrpc && adminAPI != nil {
 			if err := adminAPI.StopFrpc(m.ctx); err != nil {
 				m.addEvent(fmt.Sprintf("停止外部 frpc 失败: %v", err), "warning")
@@ -566,6 +503,7 @@ func (m *Manager) Stop() {
 	m.isFrpcRunning = false
 	m.isConnected = false
 	m.ownsFrpc = false
+	m.engine = nil
 	for i := range m.tunnels {
 		if m.tunnels[i].Enabled {
 			m.tunnels[i].RuntimeStatus = string(config.StatusClosed)
@@ -581,14 +519,18 @@ func (m *Manager) StopImmediately() {
 	m.ResetReconnectState()
 	m.mu.RLock()
 	ownsFrpc := m.ownsFrpc
+	eng := m.engine
 	m.mu.RUnlock()
 	if ownsFrpc {
-		m.frpc.StopImmediately()
+		if eng != nil {
+			eng.Stop()
+		}
 	}
 	m.mu.Lock()
 	m.isFrpcRunning = false
 	m.isConnected = false
 	m.ownsFrpc = false
+	m.engine = nil
 	m.mu.Unlock()
 }
 
@@ -620,6 +562,45 @@ func (m *Manager) waitForAdminAPI() error {
 		time.Sleep(500 * time.Millisecond)
 	}
 	return fmt.Errorf("admin API not ready")
+}
+
+// watchEngineExit monitors the engine's Done channel and triggers the same
+// recovery flow as the old frpc.Process OnTermination callback. Unlike the
+// process mode, we cannot distinguish intentional stop from crash here — the
+// caller (Stop/StopImmediately/recoverConnection) nils m.engine before/after
+// calling eng.Stop, so if eng is still set on m.engine when Done fires it
+// means an unexpected exit (e.g. frp login failure with retry exhaustion).
+func (m *Manager) watchEngineExit(eng *engine.Engine) {
+	<-eng.Done()
+	m.mu.Lock()
+	currentEng := m.engine
+	if currentEng != eng {
+		// Engine was already replaced or intentionally stopped.
+		m.mu.Unlock()
+		return
+	}
+	m.isFrpcRunning = false
+	m.isConnected = false
+	m.ownsFrpc = false
+	m.stopStatusPolling()
+	for i := range m.tunnels {
+		if m.tunnels[i].Enabled {
+			m.tunnels[i].RuntimeStatus = string(config.StatusClosed)
+			m.tunnels[i].ErrorMessage = "tunnel engine 已退出"
+		}
+	}
+	m.mu.Unlock()
+	m.addEvent("tunnel engine 已退出，准备自动恢复", "warning")
+	// Trigger auto-recovery (mirrors old isCrash path).
+	m.mu.Lock()
+	if !m.reconnectFailed {
+		m.isReconnecting = true
+	}
+	m.mu.Unlock()
+	go func() {
+		time.Sleep(2 * time.Second)
+		m.recoverConnection("tunnel engine 异常退出，正在自动重启")
+	}()
 }
 
 func (m *Manager) regenerateFrpcConfig() {
@@ -721,8 +702,9 @@ func (m *Manager) pollStatus() {
 	}
 	m.mu.RLock()
 	ownsFrpc := m.ownsFrpc
+	eng := m.engine
 	m.mu.RUnlock()
-	if ownsFrpc && !m.frpc.IsRunning() {
+	if ownsFrpc && (eng == nil || !eng.IsRunning()) {
 		m.mu.Lock()
 		m.isFrpcRunning = false
 		m.mu.Unlock()
@@ -909,12 +891,18 @@ func (m *Manager) recoverConnection(reason string) {
 	ownsFrpc := m.ownsFrpc
 	m.mu.RUnlock()
 	if ownsFrpc {
-		m.frpc.StopImmediately()
+		m.mu.RLock()
+		eng := m.engine
+		m.mu.RUnlock()
+		if eng != nil {
+			eng.Stop()
+		}
 	}
 	m.mu.Lock()
 	m.isFrpcRunning = false
 	m.isConnected = false
 	m.ownsFrpc = false
+	m.engine = nil
 	m.consecutiveFailures = 0
 	m.restartFailures++
 	restartFailures := m.restartFailures

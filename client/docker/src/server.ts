@@ -51,7 +51,7 @@ export async function createMeilinkServer(options: MeilinkServerOptions = {}): P
   const dataDir = options.dataDir || process.env.MEILINK_DATA_DIR || "/data";
   const webDir = options.webDir || join(import.meta.dirname, "../web");
   const auth = new AuthService(dataDir);
-  const manager = new TunnelManager(new DataStore(dataDir), options.frpcBin || process.env.MEILINK_FRPC_PATH || "/usr/local/bin/frpc");
+  const manager = new TunnelManager(new DataStore(dataDir), options.frpcBin || process.env.MEILINK_FRPC_PATH || "/usr/local/bin/meilink-tunnel");
   await auth.initialize({
     ...process.env,
     ...(options.adminUser ? { MEILINK_ADMIN_USER: options.adminUser } : {}),
