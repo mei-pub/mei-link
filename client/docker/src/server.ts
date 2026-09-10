@@ -13,6 +13,16 @@ export type MeilinkServerOptions = {
   webDir?: string;
 };
 
+/**
+ * 解析隧道引擎路径。`MEILINK_FRPC_PATH` 环境变量已作废（v0.0.14 起）：
+ * NAS / 旧教程曾把外部值覆盖成不存在的 `/usr/local/bin/frpc` 导致 spawn ENOENT，
+ * 现在外部设置一律忽略，固定使用镜像内置的 meilink-tunnel。
+ * options.frpcBin 仅供测试注入。
+ */
+export function resolveEnginePath(override?: string): string {
+  return override || "/usr/local/bin/meilink-tunnel";
+}
+
 function json(response: ServerResponse, status: number, value: unknown) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(value));
@@ -51,7 +61,7 @@ export async function createMeilinkServer(options: MeilinkServerOptions = {}): P
   const dataDir = options.dataDir || process.env.MEILINK_DATA_DIR || "/data";
   const webDir = options.webDir || join(import.meta.dirname, "../web");
   const auth = new AuthService(dataDir);
-  const manager = new TunnelManager(new DataStore(dataDir), options.frpcBin || process.env.MEILINK_FRPC_PATH || "/usr/local/bin/meilink-tunnel");
+  const manager = new TunnelManager(new DataStore(dataDir), resolveEnginePath(options.frpcBin));
   await auth.initialize({
     ...process.env,
     ...(options.adminUser ? { MEILINK_ADMIN_USER: options.adminUser } : {}),

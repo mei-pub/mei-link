@@ -205,7 +205,7 @@
 ### 8.1 隧道引擎集成（三端形态）
 - macOS 原生客户端：`project.yml` 的 `preBuildScripts` 调 `scripts/build/build-engine.sh`，把 `meilink-tunnel` 编译到 `.app/Contents/MacOS/meilink-tunnel`；Swift 端以子进程方式 spawn，参数 `["-c", frpc.toml 路径]`（与 frpc CLI 约定一致）
 - Tauri 桌面客户端：Go sidecar 进程内直接嵌入 frp library（`internal/engine`），**无引擎子进程、不内嵌引擎二进制**，无需额外下载产物
-- Docker 客户端：多阶段 `client/docker/Dockerfile`（build context 必须是仓库根目录）编译 `meilink-tunnel` 到 `/usr/local/bin/meilink-tunnel`，经 `MEILINK_FRPC_PATH`（默认 `/usr/local/bin/meilink-tunnel`）传给 Node；spawn 失败（路径/权限）必须收敛为可读错误 + onExit，交 watchdog 阶梯处理，不允许 unhandled error 崩掉 node 服务
+- Docker 客户端：多阶段 `client/docker/Dockerfile`（build context 必须是仓库根目录）编译 `meilink-tunnel` 到 `/usr/local/bin/meilink-tunnel`，Node 固定 spawn 该内置路径（`resolveEnginePath`）；`MEILINK_FRPC_PATH` 已作废（v0.0.14 起外部值一律忽略——NAS/旧教程曾用它覆盖成不存在的 `/usr/local/bin/frpc` 导致 spawn ENOENT）；spawn 失败（路径/权限）必须收敛为可读错误 + onExit，交 watchdog 阶梯处理，不允许 unhandled error 崩掉 node 服务
 
 ### 8.2 图标资源
 - 源：`client/macos-native/Resources/AppIcon.png`（1254×1254）

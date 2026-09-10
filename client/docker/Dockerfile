@@ -24,8 +24,9 @@ RUN chmod +x docker-entrypoint.sh
 
 # 注意：不设 USER meilink —— entrypoint 需以 root 启动来 chown 挂载卷，
 # 随后用 su-exec 降权为 meilink 运行 node 服务。
+# MEILINK_FRPC_PATH 已作废：引擎固定为镜像内置 meilink-tunnel，不再声明/读取该变量，
+# 避免 NAS/旧教程用外部值覆盖成不存在的 frpc 路径。
 ENV MEILINK_DATA_DIR=/data \
-    MEILINK_FRPC_PATH=/usr/local/bin/meilink-tunnel \
     MEILINK_WEB_PORT=17420 \
     MEILINK_ADMIN_USER=admin \
     MEILINK_ADMIN_PASSWORD=
