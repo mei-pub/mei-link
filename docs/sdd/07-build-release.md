@@ -37,13 +37,13 @@ open Meilink.xcodeproj  # 在 Xcode 中 Archive
 ```bash
 swift build
 ```
-- 不含 frpc 二进制（需手动 `scripts/assets/download-frpc.sh`）
+- 不含 meilink-tunnel 引擎二进制（需手动 `scripts/build/build-engine.sh`，要求 Go 1.25+ 工具链）
 - 不含 AppIcon.icns 集成
 
-### 2.4 frpc 集成
-- `project.yml` 的 `preBuildScripts` 在每次构建前调 `scripts/assets/download-frpc.sh`
-- frpc 下载到 `${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/MacOS/frpc`
-- frp 版本：`v0.70.0`（硬编码在 `scripts/assets/download-frpc.sh`）
+### 2.4 隧道引擎集成
+- `project.yml` 的 `preBuildScripts` 在每次构建前调 `scripts/build/build-engine.sh`，从 `client/desktop/sidecar/cmd/meilink-tunnel/` 源码编译引擎
+- 引擎输出到 `${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/MacOS/meilink-tunnel`（取代旧的 frpc 下载）
+- frp 依赖版本：`v0.70.0`（随 `client/desktop/sidecar/go.mod`，要求 Go 1.25+）
 - 架构自动检测：`arm64` / `x86_64`
 
 ### 2.5 打包 DMG

@@ -1,7 +1,11 @@
 services:
   meilink-client:
     image: meilink-client:latest
-    build: .
+    # 多阶段 Dockerfile 需以仓库根目录为 context（engine-builder 阶段要 COPY client/desktop/sidecar/），
+    # 因此 context 指向上一级，dockerfile 相对根目录。
+    build:
+      context: ..
+      dockerfile: client/docker/Dockerfile
     ports: ["${MEILINK_WEB_PORT:-17420}:17420"]
     environment:
       MEILINK_ADMIN_USER: ${MEILINK_ADMIN_USER:-admin}

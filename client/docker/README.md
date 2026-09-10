@@ -127,7 +127,7 @@ bound only to the container loopback address and is not a published port.
 | `MEILINK_ADMIN_PASSWORD` | (empty) | Initial login password — **required on first start**; container UIs will show this field |
 | `MEILINK_WEB_PORT` | `17420` | Browser management port |
 | `MEILINK_DATA_DIR` | `/data` | Persistent data directory |
-| `MEILINK_FRPC_PATH` | `/usr/local/bin/frpc` | Path to the `frpc` binary |
+| `MEILINK_FRPC_PATH` | `/usr/local/bin/meilink-tunnel` | Path to the tunnel engine binary (self-built from embedded frp library; named `meilink-tunnel`, **not** `frpc`). Leave at default unless you mount your own engine |
 
 > `MEILINK_ADMIN_PASSWORD` 默认值为空：在 docker 管理工具 / NAS UI 创建容器时该变量会显示出来，必须填一个强密码；首次启动未设置会报错 `MEILINK_ADMIN_PASSWORD is required on first start`。
 

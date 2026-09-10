@@ -38,10 +38,10 @@
 - `tlsEnabled` 默认 `true`（`ServerConfig.init` 默认值 + `SettingsView` / `SetupView` 默认 Toggle on）
 - 注意 UI 文案明确："加密 frpc 到 frps 的控制连接，不等同于 HTTPS 隧道"
 
-### 2.4 frpc 二进制完整性
-- frpc 二进制由 `scripts/assets/download-frpc.sh` 在构建期从 GitHub release 下载（v0.70.0）
-- 运行期不下载、不升级 frpc
-- 二进制查找顺序：`Bundle.main.executableURL.deletingLastPathComponent()/frpc` → `Bundle.main.path(forResource: "frpc")`
+### 2.4 隧道引擎二进制完整性（meilink-tunnel）
+- 隧道引擎是自研二进制 `meilink-tunnel`（嵌入 frp library，frp v0.70.0），由 `scripts/build/build-engine.sh` 在构建期从 `client/desktop/sidecar/cmd/meilink-tunnel/` 源码编译——**不下载 frpc 官方二进制**（杀软对 frpc 名称/哈希有误报，见 `docs/rules/build-release.md`）
+- 运行期不下载、不升级引擎
+- 二进制查找顺序（`FrpcProcess.findFrpcPath`）：`Bundle.main.executableURL.deletingLastPathComponent()/meilink-tunnel` → `Bundle.main.path(forResource: "meilink-tunnel")` → 失败
 
 ## 3. 生命周期约束
 
@@ -202,9 +202,10 @@
 
 ## 8. 构建约束
 
-### 8.1 frpc 二进制集成
-- macOS 原生客户端：`project.yml` 的 `preBuildScripts` 调 `scripts/assets/download-frpc.sh`，把 frpc 下载到 `.app/Contents/MacOS/frpc`
-- Tauri 桌面客户端：构建期由 `scripts/build/build-desktop.sh` 下载对应平台 frpc 到 `client/desktop/src-tauri/resources/`，作为安装器内嵌资源，运行期经 `MEILINK_FRPC_BIN` 传给 Go sidecar
+### 8.1 隧道引擎集成（三端形态）
+- macOS 原生客户端：`project.yml` 的 `preBuildScripts` 调 `scripts/build/build-engine.sh`，把 `meilink-tunnel` 编译到 `.app/Contents/MacOS/meilink-tunnel`；Swift 端以子进程方式 spawn，参数 `["-c", frpc.toml 路径]`（与 frpc CLI 约定一致）
+- Tauri 桌面客户端：Go sidecar 进程内直接嵌入 frp library（`internal/engine`），**无引擎子进程、不内嵌引擎二进制**，无需额外下载产物
+- Docker 客户端：多阶段 `client/docker/Dockerfile`（build context 必须是仓库根目录）编译 `meilink-tunnel` 到 `/usr/local/bin/meilink-tunnel`，经 `MEILINK_FRPC_PATH`（默认 `/usr/local/bin/meilink-tunnel`）传给 Node；spawn 失败（路径/权限）必须收敛为可读错误 + onExit，交 watchdog 阶梯处理，不允许 unhandled error 崩掉 node 服务
 
 ### 8.2 图标资源
 - 源：`client/macos-native/Resources/AppIcon.png`（1254×1254）

@@ -202,8 +202,9 @@ export class TunnelManager {
   private async startFrpc() {
     this.frpc.start(join(this.store.dir, "frpc.toml"),
       line => this.log(`frpc: ${line}`),
-      code => {
-        this.log(`frpc 进程已退出，状态码: ${code}`, "error");
+      (code, reason) => {
+        // spawn 失败（引擎不存在/无权限）带可读原因；正常退出只报状态码。
+        this.log(reason || `frpc 进程已退出，状态码: ${code}`, "error");
         // 手动连接 / 自动重启过程中的退出由重启路径处理，不额外触发恢复。
         if (this.reconnect && !this.restarting) this.reconnect.kick();
       });
@@ -252,6 +253,8 @@ export class TunnelManager {
     let lastError: unknown;
     for (let attempt = 0; attempt < 30; attempt++) {
       try { if ((await fetch(`http://127.0.0.1:${this.config!.adminPort}/healthz`)).ok) return; } catch (error) { lastError = error; }
+      // 引擎 spawn 失败（路径/权限）时立即失败，不空等满 7.5s 轮询。
+      if (!this.frpc.running()) throw new Error("frpc 启动后立即退出（引擎路径或权限问题，详见事件日志）");
       await new Promise(resolve => setTimeout(resolve, 250));
     }
     throw new Error(`Admin API 未就绪: ${lastError instanceof Error ? lastError.message : "timeout"}`);

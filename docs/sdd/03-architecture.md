@@ -100,7 +100,7 @@ sequenceDiagram
 ### 3.4 `FrpcProcess`（非 MainActor）
 - `Process` 封装，提供 `start / stop / stopImmediately / kill -9` 兜底
 - 回调：`onOutput` / `onTermination` / `onStarted`
-- frpc 二进制查找顺序：`Bundle.main.executableURL.deletingLastPathComponent()/frpc` → `Bundle.main.path(forResource: "frpc")` → 失败
+- 引擎二进制查找顺序：`Bundle.main.executableURL.deletingLastPathComponent()/meilink-tunnel` → `Bundle.main.path(forResource: "meilink-tunnel")` → 失败
 - stdout/stderr 通过 `Pipe.readabilityHandler` 异步按行回调
 - `terminationHandler` 在主线程派发 `onTermination(status, intentional)`
 - **主动停止标记**：`stop` / `stopImmediately` 先 `markIntentionalStop()`，`terminationHandler` 派发时 `consumeIntentionalStop()` 得到 `intentional`，连同退出码一起传给上层。被终止信号杀掉的进程退出码非 0（信号值），但 `intentional=true`，不应被当作崩溃
